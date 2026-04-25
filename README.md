@@ -1,4 +1,2 @@
 # NewQwenzyHub
-
-
-# Do not use this
+by qwenzy
