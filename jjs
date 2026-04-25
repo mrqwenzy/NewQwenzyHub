@@ -731,25 +731,42 @@ local _AnimationsDropdown = AnimsTab:Dropdown({
 		Config.CurrentAnim = Options
 	end,
 })
-task.delay(2, function()
-	local names = {}
 
-	WindUI:Notify({ Title = "EXPECT LAG", Content = "Loading animations.", Duration = 3, Image = "laugh" })
+WindUI:Popup({
+	Title = "Load anims tab?",
+	Icon = "info",
+	Content = "HUGE LAG",
+	Buttons = {
+		{
+			Title = "Load",
+			Callback = function()
+				local names = {}
 
-	task.wait(1)
-	for i, mainParent in ReplicatedStorage.Animations:GetChildren() do
-		for j, anim in mainParent:GetChildren() do
-			if anim:IsA("Animation") then
-				local nameID = mainParent.Name .. " - " .. anim.Name
-				Anims[nameID] = anim.AnimationId
-				table.insert(names, nameID)
-			else
-				continue
-			end
-		end
-	end
-	_AnimationsDropdown:Refresh(names)
-end)
+				WindUI:Notify({ Title = "EXPECT LAG", Content = "Loading animations.", Duration = 3, Image = "laugh" })
+
+				for _, mainParent in ReplicatedStorage.Animations:GetChildren() do
+					for _, anim in mainParent:GetChildren() do
+						if anim:IsA("Animation") then
+							local nameID = mainParent.Name .. " - " .. anim.Name
+							Anims[nameID] = anim.AnimationId
+							table.insert(names, nameID)
+						else
+							continue
+						end
+					end
+				end
+				_AnimationsDropdown:Refresh(names)
+			end,
+			Variant = "Tertiary",
+		},
+		{
+			Title = "Skip",
+			Icon = "arrow-right",
+			Callback = function() end,
+			Variant = "Primary",
+		},
+	},
+})
 
 local function playSelectedAnim()
 	if not Config.CurrentAnim then
