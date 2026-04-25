@@ -731,6 +731,7 @@ local _AnimationsDropdown = AnimsTab:Dropdown({
 		Config.CurrentAnim = Options
 	end,
 })
+task.wait(1)
 
 WindUI:Popup({
 	Title = "Load anims tab?",
@@ -743,7 +744,7 @@ WindUI:Popup({
 				local names = {}
 
 				WindUI:Notify({ Title = "EXPECT LAG", Content = "Loading animations.", Duration = 3, Image = "laugh" })
-
+				task.wait(1)
 				for _, mainParent in ReplicatedStorage.Animations:GetChildren() do
 					for _, anim in mainParent:GetChildren() do
 						if anim:IsA("Animation") then
