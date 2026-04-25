@@ -1,0 +1,1591 @@
+--!nocheck
+
+local HttpService = game:GetService("HttpService")
+print(HttpService:JSONEncode({ "a", "d" }))
+local Players = game:GetService("Players")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local Player = Players.LocalPlayer
+local Fill = Player.PlayerGui.Main.Ultimate.Bar.Fill
+local function TriggerMove(key)
+	VirtualInputManager:SendKeyEvent(true, key, false, game)
+	VirtualInputManager:SendKeyEvent(false, key, false, game)
+end
+local Camera = workspace.CurrentCamera
+-- WindUI loader
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+	Title = "Qwenzy hub  @mrqwenzy", -- CHANGE TITLE HERE!
+	Theme = "Dark",
+	Transparent = true,
+	Resizable = true,
+
+	Size = UDim2.fromOffset(580, 460),
+	MinSize = Vector2.new(560, 350),
+	MaxSize = Vector2.new(850, 560),
+
+	SideBarWidth = 200,
+	BackgroundImageTransparency = 0.42,
+	HideSearchBar = true,
+	ScrollBarEnabled = false,
+})
+
+Window:EditOpenButton({
+	Title = "Open",
+	Icon = "external-link",
+	CornerRadius = UDim.new(0, 16),
+	StrokeThickness = 2,
+	Color = ColorSequence.new(Color3.fromHex("#453e41"), Color3.fromHex("#000000")),
+	OnlyMobile = false,
+	Enabled = true,
+	Draggable = true,
+})
+
+local KeyNames = {
+	[1] = "One",
+	[2] = "Two",
+	[3] = "Three",
+	[4] = "Four",
+	[5] = "Five",
+	[6] = "Six",
+	[7] = "Seven",
+	[8] = "Eight",
+	[9] = "Nine",
+	[0] = "Zero",
+}
+
+WindUI:Notify({ Title = "Have fun", Content = "By @mrqwenzy", Duration = 6.5, Image = "laugh" })
+
+local Ver = workspace:FindFirstChild("QwenzyBoosting")
+if not Ver then
+	Ver = Instance.new("NumberValue", workspace)
+	Ver.Name = "QwenzyBoosting"
+	Ver.Value = 0
+end
+Ver.Value = Ver.Value + 1
+local currVer = Ver.Value
+local cns = {}
+
+--// SHARED HELPERS
+
+local function getMoveKey(moveName)
+	local button = Players.LocalPlayer.PlayerGui.Main.Moveset:FindFirstChild(moveName)
+	if button then
+		local key = button:FindFirstChild("Key")
+		if key then
+			return Enum.KeyCode[KeyNames[tonumber(key.Text)]]
+		end
+	end
+	return nil
+end
+
+local function clickMouse(location)
+	local mouseLocation = UserInputService:GetMouseLocation()
+	VirtualInputManager:SendMouseButtonEvent(
+		location and location.X or mouseLocation.X,
+		location and location.Y or mouseLocation.Y,
+		0,
+		true,
+		game,
+		0
+	)
+	task.wait()
+	VirtualInputManager:SendMouseButtonEvent(
+		location and location.X or mouseLocation.X,
+		location and location.Y or mouseLocation.Y,
+		0,
+		false,
+		game,
+		0
+	)
+end
+
+local function safeCall(fn, ...)
+	local ok, result = pcall(fn, ...)
+	if ok then
+		return result
+	end
+	return nil
+end
+
+local function getTrackData(track)
+	local animation = track.Animation
+
+	return {
+		Track = track,
+		TrackName = track.Name,
+		TrackClass = track.ClassName,
+		Animation = animation,
+		AnimationName = animation and animation.Name or nil,
+		AnimationId = animation and animation.AnimationId or nil,
+		IsPlaying = safeCall(function()
+			return track.IsPlaying
+		end),
+		Length = safeCall(function()
+			return track.Length
+		end),
+		Looped = safeCall(function()
+			return track.Looped
+		end),
+		Priority = safeCall(function()
+			return track.Priority
+		end),
+		Speed = safeCall(function()
+			return track.Speed
+		end),
+		TimePosition = safeCall(function()
+			return track.TimePosition
+		end),
+		WeightCurrent = safeCall(function()
+			return track.WeightCurrent
+		end),
+		WeightTarget = safeCall(function()
+			return track.WeightTarget
+		end),
+		Archivable = safeCall(function()
+			return track.Archivable
+		end),
+		Parent = safeCall(function()
+			return track.Parent
+		end),
+	}
+end
+
+local character = function()
+	return Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+end
+
+local characters = workspace:FindFirstChild("Characters")
+
+local function GetClosestCharacter(maxDist)
+	local myChar = character()
+	if not myChar then
+		return nil
+	end
+	local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot then
+		return nil
+	end
+	local closest, closestDist = nil, maxDist
+	if characters then
+		for _, model in ipairs(characters:GetChildren()) do
+			if model == myChar then
+				continue
+			end
+			local root = model:FindFirstChild("HumanoidRootPart")
+			local hum = model:FindFirstChildOfClass("Humanoid")
+			if root and hum and hum.Health > 0 then
+				local dist = (root.Position - myRoot.Position).Magnitude
+				if dist < closestDist then
+					closestDist = dist
+					closest = model
+				end
+			end
+		end
+	end
+	return closest, closestDist
+end
+
+local function GetMoves()
+	local moves = {}
+	for _, v in pairs(Players.LocalPlayer.PlayerGui.Main.Moveset:GetChildren()) do
+		if v:IsA("Frame") then
+			table.insert(moves, v.Name)
+		end
+	end
+	return moves
+end
+
+local function IsBehindTarget(target, threshold)
+	threshold = threshold or 0.7
+	local myChar = character()
+	if not myChar or not target then
+		return false
+	end
+	local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+	local targetRoot = target:FindFirstChild("HumanoidRootPart")
+	if not myRoot or not targetRoot then
+		return false
+	end
+	local toAttacker = (myRoot.Position - targetRoot.Position)
+	toAttacker = Vector3.new(toAttacker.X, 0, toAttacker.Z).Unit
+	local targetLook = Vector3.new(targetRoot.CFrame.LookVector.X, 0, targetRoot.CFrame.LookVector.Z).Unit
+	return targetLook:Dot(toAttacker) >= threshold, targetLook:Dot(toAttacker)
+end
+
+--// LOCK-ON SYSTEM
+
+local LockOn = {
+	Enabled = false,
+	Target = nil,
+	Conn = nil,
+}
+
+local function SetLockOnTarget(target)
+	LockOn.Target = target
+	if target then
+		WindUI:Notify({ Title = "Locked On", Content = target.Name, Duration = 3, Icon = "crosshair" })
+	else
+		WindUI:Notify({ Title = "Lock-On", Content = "Target cleared.", Duration = 2, Icon = "x" })
+	end
+end
+
+local function StartLockOn()
+	if LockOn.Conn then
+		LockOn.Conn:Disconnect()
+	end
+	LockOn.Conn = RunService.RenderStepped:Connect(function()
+		if not LockOn.Enabled or not LockOn.Target then
+			return
+		end
+		local myChar = character()
+		if not myChar then
+			return
+		end
+		local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+		local targetRoot = LockOn.Target:FindFirstChild("HumanoidRootPart")
+		local hum = LockOn.Target:FindFirstChildOfClass("Humanoid")
+		if not targetRoot or not hum or hum.Health <= 0 then
+			LockOn.Target = nil
+			WindUI:Notify({ Title = "Lock-On", Content = "Target lost.", Duration = 2, Icon = "x" })
+			return
+		end
+		if not myRoot then
+			return
+		end
+		local cam = workspace.CurrentCamera
+		local targetPos = targetRoot.Position + Vector3.new(0, 0, 0)
+		local camPos = cam.CFrame.Position
+		cam.CFrame = CFrame.new(camPos, targetPos)
+	end)
+end
+
+local function StopLockOn()
+	if LockOn.Conn then
+		LockOn.Conn:Disconnect()
+		LockOn.Conn = nil
+	end
+end
+
+local function ToggleLockOn()
+	if LockOn.Target then
+		SetLockOnTarget(nil)
+		LockOn.Enabled = false
+	else
+		local target = GetClosestCharacter(60)
+		if target then
+			SetLockOnTarget(target)
+			LockOn.Enabled = true
+			StartLockOn()
+		else
+			WindUI:Notify({
+				Title = "Lock-On",
+				Content = "No enemy nearby.",
+				Duration = 3,
+				Icon = "search",
+			})
+		end
+	end
+end
+
+local TouchConn
+local function EnableMobileLockOnTouch()
+	if TouchConn then
+		TouchConn:Disconnect()
+	end
+	TouchConn = UserInputService.TouchTap:Connect(function(_, gameProcessed)
+		if not gameProcessed then
+			ToggleLockOn()
+		end
+	end)
+end
+
+--// CONFIG
+
+local Config = {
+	BackStab = {
+		Moves = { "Divergent Fist" },
+		Range = 15,
+		Speed = 0.2,
+		Delay = 0,
+	},
+}
+
+local AutoConfig = {
+	NanamiR = false,
+	YujiFlash = false,
+	YujiSmartCancel = false,
+	MobileLockOnTouch = false,
+}
+
+local function playAnim(animId, looped)
+	local myChar = character()
+	if not myChar then
+		return
+	end
+	local hum = myChar:FindFirstChildOfClass("Humanoid")
+	if not hum then
+		return
+	end
+	local animator = hum:FindFirstChildOfClass("Animator")
+	if not animator then
+		return
+	end
+
+	local anim = Instance.new("Animation")
+	anim.AnimationId = tostring(animId)
+
+	local track = animator:LoadAnimation(anim)
+	track.Looped = looped or false
+	track:Play()
+	return track
+end
+
+local function dashRemote(side)
+	local args = {
+		side,
+	}
+	game:GetService("ReplicatedStorage")
+		:WaitForChild("Knit")
+		:WaitForChild("Knit")
+		:WaitForChild("Services")
+		:WaitForChild("MovementService")
+		:WaitForChild("RE")
+		:WaitForChild("Dash")
+		:FireServer(unpack(args))
+end
+
+local off = 0
+
+--// DASH
+
+local function DashBehindTarget(target, duration)
+	duration = duration or 0.3
+	local myChar = character()
+	if not myChar or not target then
+		return
+	end
+	local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+	local targetRoot = target:FindFirstChild("HumanoidRootPart")
+	if not myRoot or not targetRoot then
+		return
+	end
+
+	local cam = workspace.CurrentCamera
+	local radius = Config.BackStab.Radius or 4
+	local camRadius = radius + 6
+	local camElevation = 4
+	local maxPlayerRotSpeed = math.rad(120)
+	local startPos = myRoot.Position
+	local heightY = myRoot.Position.Y
+	local elapsed = 0
+	local playerAngleOffset = 0
+	local lastMousePos = UserInputService:GetMouseLocation()
+
+	local startAngle = (function()
+		local off = myRoot.Position - targetRoot.Position
+		return math.atan2(off.X, off.Z)
+	end)()
+
+	local smoothStartPos = startPos
+	local conn
+	conn = RunService.RenderStepped:Connect(function(dt)
+		local ok = pcall(function()
+			elapsed = elapsed + dt
+			local alpha = math.min(elapsed / duration, 1)
+			local targetPos = targetRoot.Position
+			local targetLook = targetRoot.CFrame.LookVector
+			local goalAngle = math.atan2(-targetLook.X, -targetLook.Z)
+			local delta = (goalAngle - startAngle + math.pi) % (2 * math.pi) - math.pi
+			local remaining = 1 - alpha
+			local urgency = math.abs(delta) / math.pi
+			local boostedAlpha = math.min(alpha + urgency * remaining * dt * 6, 1)
+			local t = boostedAlpha * boostedAlpha * (3 - 2 * boostedAlpha)
+			local currentMousePos = UserInputService:GetMouseLocation()
+			local mouseDeltaX = currentMousePos.X - lastMousePos.X
+			lastMousePos = currentMousePos
+			local rotDelta = math.clamp(mouseDeltaX * 0.003, -maxPlayerRotSpeed * dt, maxPlayerRotSpeed * dt)
+			playerAngleOffset = playerAngleOffset + rotDelta
+			local finalAngle = startAngle + delta * t + playerAngleOffset
+			local arcPos = targetPos
+				+ Vector3.new(math.sin(finalAngle) * radius, heightY - targetPos.Y, math.cos(finalAngle) * radius)
+			smoothStartPos = smoothStartPos:Lerp(myRoot.Position, dt * 4)
+			local lerpedPos = smoothStartPos:Lerp(arcPos, t)
+			myRoot.CFrame = CFrame.lookAt(lerpedPos, Vector3.new(targetPos.X, lerpedPos.Y, targetPos.Z))
+			if Config.BackStab.Camera then
+				local camPos = targetPos
+					+ Vector3.new(
+						math.sin(finalAngle) * camRadius,
+						(heightY - targetPos.Y) + camElevation,
+						math.cos(finalAngle) * camRadius
+					)
+				cam.CFrame = CFrame.lookAt(camPos, targetPos + Vector3.new(0, 2, 0))
+			else
+				print("no cam")
+			end
+			if alpha >= 1 then
+				conn:Disconnect()
+			end
+		end)
+		if not ok then
+			conn:Disconnect()
+		end
+	end)
+	task.wait(duration)
+end --// YUJI FUNCS
+
+local active = false
+
+local function blackFlash()
+	local args = { [1] = Players.LocalPlayer.Character.Moveset:FindFirstChild("Divergent Fist") }
+	game:GetService("ReplicatedStorage")
+		:FindFirstChild("Knit")
+		:FindFirstChild("Knit")
+		:WaitForChild("Services")
+		:WaitForChild("DivergentFistService")
+		:WaitForChild("RE")
+		:WaitForChild("Activated")
+		:FireServer(unpack(args))
+end
+
+local function callYujiSpecial()
+	game:GetService("ReplicatedStorage")
+		:WaitForChild("Knit")
+		:WaitForChild("Knit")
+		:WaitForChild("Services")
+		:WaitForChild("ItadoriService")
+		:WaitForChild("RE")
+		:WaitForChild("RightActivated")
+		:FireServer()
+end
+
+--// NANAMI FUNCS
+
+local function callNanamiSpecial(victim)
+	game:GetService("ReplicatedStorage")
+		:WaitForChild("Knit")
+		:WaitForChild("Knit")
+		:WaitForChild("Services")
+		:WaitForChild("NanamiService")
+		:WaitForChild("RE")
+		:WaitForChild("RightActivated")
+		:FireServer(victim)
+end
+
+--// ============================================================
+--// TABS
+--// ============================================================
+
+-- MAIN TAB
+local MainTab = Window:Tab({
+	Title = "Main",
+	Icon = "crown",
+	Locked = false,
+})
+MainTab:Select()
+
+MainTab:Divider()
+MainTab:Section({
+	Title = "Chain | Backstab",
+})
+local _BackStab = MainTab:Dropdown({
+	Title = "Chain moves",
+	Desc = "Choose moves for chain",
+	Values = { "Divergent Fist" },
+	Value = { "Divergent Fist" },
+	Multi = true,
+	AllowNone = true,
+	Callback = function(Options)
+		Config.BackStab.Moves = Options
+	end,
+})
+_BackStab:Refresh(GetMoves())
+
+MainTab:Button({
+	Title = "Refresh Moves",
+	Desc = "Load new moveset",
+	Locked = false,
+	Callback = function()
+		_BackStab:Refresh(GetMoves())
+	end,
+})
+
+local _RangeSlider = MainTab:Slider({
+	Title = "Range",
+	Step = 1,
+	Value = {
+		Min = 5,
+		Max = 50,
+		Default = 15,
+	},
+	Callback = function(value)
+		Config.BackStab.Range = value
+	end,
+})
+
+local _SpeedSlider = MainTab:Slider({
+	Title = "Speed",
+	Step = 0.01,
+	Value = {
+		Min = 0,
+		Max = 1,
+		Default = 0.2,
+	},
+	Callback = function(value)
+		Config.BackStab.Speed = value
+	end,
+})
+
+local _RadSlider = MainTab:Slider({
+	Title = "Radius",
+	Step = 0.01,
+	Value = {
+		Min = 0,
+		Max = 10,
+		Default = 4,
+	},
+	Callback = function(value)
+		Config.BackStab.Radius = value
+	end,
+})
+
+-- FIX 1: renamed from _DelaySlider to _MainDelaySlider (duplicate local name)
+local _MainDelaySlider = MainTab:Slider({
+	Title = "Delay",
+	Step = 0.01,
+	Value = {
+		Min = 0,
+		Max = 1,
+		Default = 0,
+	},
+	Callback = function(value)
+		Config.BackStab.Delay = value
+	end,
+})
+
+MainTab:Toggle({
+	Title = "Move camera",
+	Icon = "check",
+	Type = "Checkbox",
+	Flag = "cameraFF",
+	Value = false,
+	Callback = function(state)
+		Config.BackStab.Camera = state
+	end,
+})
+MainTab:Divider()
+MainTab:Section({
+	Title = "Lock on",
+})
+
+MainTab:Button({
+	Title = "Call lock-on",
+	Desc = "Toggle lock on",
+	Locked = false,
+	Callback = function()
+		ToggleLockOn()
+	end,
+})
+
+MainTab:Toggle({
+	Title = "Lock on  (mobile)",
+	Desc = "Touch to lock on toggle",
+	Icon = "check",
+	Type = "Checkbox",
+	Flag = "LockOnMobile",
+	Value = false,
+	Callback = function(state)
+		AutoConfig.MobileLockOnTouch = state
+		if state then
+			EnableMobileLockOnTouch()
+		else
+			if TouchConn then
+				TouchConn:Disconnect()
+				TouchConn = nil
+			end
+		end
+	end,
+})
+
+MainTab:Divider()
+MainTab:Section({
+	Title = "Auto play (tuff)(=",
+})
+
+MainTab:Toggle({
+	Title = "Auto play",
+	Icon = "check",
+	Type = "Checkbox",
+	Flag = "AutoPlayFR",
+	Value = false,
+	Callback = function(state)
+		AutoConfig.AutoPlay = state
+	end,
+})
+
+--// YUJI TAB
+local YujiTab = Window:Tab({
+	Title = "Yuji",
+	Icon = "zap",
+})
+YujiTab:Divider()
+YujiTab:Section({
+	Title = "Black flash",
+})
+
+YujiTab:Toggle({
+	Title = "Auto Black Flash",
+	Desc = "Auto divergent fist timing",
+	Icon = "check",
+	Type = "Checkbox",
+	Flag = "BlackFlash",
+	Value = false,
+	Callback = function(state)
+		AutoConfig.YujiFlash = state
+	end,
+})
+local _PingSlider = YujiTab:Slider({
+	Title = "Ping slider",
+	Desc = "If auto bf not working try to change this slider",
+	Step = 0.01,
+	Value = {
+		Min = 0.01,
+		Max = 0.3,
+		Default = 0.15,
+	},
+	Callback = function(value)
+		Config.Ping = value
+	end,
+})
+
+YujiTab:Toggle({
+	Title = "Auto feint",
+	Icon = "check",
+	Type = "Checkbox",
+	Flag = "SmartBF",
+	Value = false,
+	Callback = function(state)
+		AutoConfig.YujiSmartCancel = state
+	end,
+})
+
+YujiTab:Toggle({
+	Title = "Repeat on feint",
+	Icon = "check",
+	Type = "Checkbox",
+	Flag = "SmartBFRepeat",
+	Value = false,
+	Callback = function(state)
+		AutoConfig.YujiRepeatOnCancel = state
+	end,
+})
+
+-- NANAMI TAB
+local NanamiTab = Window:Tab({
+	Title = "Nanami",
+	Icon = "shield",
+})
+
+NanamiTab:Divider()
+NanamiTab:Section({
+	Title = "Auto",
+})
+
+NanamiTab:Toggle({
+	Title = "Auto Ratio",
+	Desc = "Auto special",
+	Icon = "check",
+	Flag = "NanamiRatio",
+	Type = "Checkbox",
+	Value = false,
+	Callback = function(state)
+		AutoConfig.NanamiR = state
+	end,
+})
+
+--// Anims TAB
+local AnimsTab = Window:Tab({
+	Title = "Animations",
+	Icon = "circle-play",
+})
+
+AnimsTab:Divider()
+AnimsTab:Section({
+	Title = "Animations",
+})
+
+local Anims = {}
+local _AnimationsDropdown = AnimsTab:Dropdown({
+	Title = "Animation",
+	Values = { "Loading..." },
+	Value = "Loading...",
+	Multi = false,
+	AllowNone = true,
+	Callback = function(Options)
+		Config.CurrentAnim = Options
+	end,
+})
+task.delay(2, function()
+	local names = {}
+
+	WindUI:Notify({ Title = "EXPECT LAG", Content = "Loading animations.", Duration = 3, Image = "laugh" })
+
+	task.wait(1)
+	for i, mainParent in ReplicatedStorage.Animations:GetChildren() do
+		for j, anim in mainParent:GetChildren() do
+			if anim:IsA("Animation") then
+				local nameID = mainParent.Name .. " - " .. anim.Name
+				Anims[nameID] = anim.AnimationId
+				table.insert(names, nameID)
+			else
+				continue
+			end
+		end
+	end
+	_AnimationsDropdown:Refresh(names)
+end)
+
+local function playSelectedAnim()
+	if not Config.CurrentAnim then
+		warn("no anim")
+		return
+	end
+	local animId = Anims[Config.CurrentAnim]
+	if animId then
+		print("play", Config.CurrentAnim, animId)
+		playAnim(animId, false)
+	end
+end
+
+AnimsTab:Button({
+	Title = "Play",
+	Locked = false,
+	Callback = function()
+		playSelectedAnim()
+	end,
+})
+
+local function animButton(name, animId)
+	AnimsTab:Button({
+		Title = name,
+		Icon = "circle-play",
+		Locked = false,
+		Callback = function()
+			playAnim(animId, false)
+		end,
+	})
+end
+
+AnimsTab:Button({
+	Title = "Add button",
+	Locked = false,
+	Callback = function()
+		if not Config.CurrentAnim then
+			warn("no anim")
+			return
+		end
+		local animId = Anims[Config.CurrentAnim]
+		if animId then
+			animButton(Config.CurrentAnim, animId)
+		end
+	end,
+})
+
+local function isAttacking(character)
+	if character then
+		local info = character:FindFirstChild("Info")
+		if info and info:FindFirstChild("InSkill") then
+			return true
+		end
+	end
+	return false
+end
+
+--// Customization TAB
+
+local CustomizTab = Window:Tab({
+	Title = "Visuals",
+	Icon = "paint-bucket",
+})
+CustomizTab:Divider()
+CustomizTab:Section({
+	Title = "Moveset",
+})
+
+CustomizTab:Colorpicker({
+	Title = "Cooldown color",
+	Default = Color3.fromRGB(63, 63, 63),
+	Transparency = 0,
+	Locked = false,
+	Callback = function(color)
+		Config.CustomCooldownColor = color
+	end,
+})
+
+CustomizTab:Colorpicker({
+	Title = "Button color",
+	Default = Color3.fromRGB(0, 0, 0),
+	Transparency = 0,
+	Locked = false,
+	Callback = function(color)
+		Config.CustomButtonColor = color
+	end,
+})
+
+-- FIX 2: renamed from _DelaySlider (duplicate) to _PaddingSlider
+-- FIX 3: replaced hardcoded player name "icidjjsjdj" with Players.LocalPlayer
+local _PaddingSlider = CustomizTab:Slider({
+	Title = "Custom padding",
+	Step = 1,
+	Value = {
+		Min = 0,
+		Max = 500,
+		Default = 5,
+	},
+	Callback = function(value)
+		Players.LocalPlayer.PlayerGui.Main.Moveset.UIListLayout.Padding = UDim.new(0, value)
+	end,
+})
+
+--// ============================================================
+--// INPUT / LOGIC
+--// ============================================================
+
+AutoConfig.LastCancel = tick()
+local function onKey(input, gameProcessed, isSimulated)
+	local gui = Players.LocalPlayer.PlayerGui.Main.Moveset
+
+	task.spawn(function()
+		if not gameProcessed and Ver.Value == currVer then
+			for _, moveName in ipairs(Config.BackStab.Moves) do
+				local key = getMoveKey(moveName)
+				if gui[moveName].Cooldown.Size.Y.Scale == 0 then
+					if key and input.KeyCode == key then
+						local target = GetClosestCharacter(Config.BackStab.Range)
+						if target then
+							if Config.BackStab.Delay ~= 0 then
+								task.delay(Config.BackStab.Delay, function()
+									DashBehindTarget(target, Config.BackStab.Speed)
+								end)
+							else
+								DashBehindTarget(target, Config.BackStab.Speed)
+							end
+						end
+					end
+				end
+			end
+		end
+	end)
+end
+
+local function simulateKeyFromMove(moveName)
+	local key = getMoveKey(moveName)
+	if not key then
+		warn("NO KEY.")
+		return
+	end
+	onKey({ KeyCode = key, UserInputType = Enum.UserInputType.Keyboard }, false, true)
+end
+
+local function hookButton(frame)
+	if not frame:IsA("Frame") then
+		return
+	end
+	local function onActivated()
+		if Ver.Value == currVer then
+			simulateKeyFromMove(frame.Name)
+		end
+	end
+	local btn = frame:FindFirstChildWhichIsA("TextButton") or frame:FindFirstChildWhichIsA("ImageButton")
+	if btn then
+		cns[btn.Name .. "Activated"] = btn.Activated:Connect(onActivated)
+	else
+		cns["FrameINPUT" .. frame.Name] = frame.InputBegan:Connect(function(inp)
+			if
+				inp.UserInputType == Enum.UserInputType.Touch
+				or inp.UserInputType == Enum.UserInputType.MouseButton1
+			then
+				onActivated()
+			end
+		end)
+	end
+
+	if Config.CustomCooldownColor then
+		local cooldownFrame = frame:FindFirstChildWhichIsA("Cooldown") :: Frame
+		if cooldownFrame then
+			cooldownFrame.BackgroundColor3 = Config.CustomCooldownColor
+		end
+	end
+end
+
+local function hookHotbarButtons()
+	local moveset = Players.LocalPlayer.PlayerGui:WaitForChild("Main"):WaitForChild("Moveset")
+	for _, frame in ipairs(moveset:GetChildren()) do
+		hookButton(frame)
+	end
+	cns["ChildAddedMOVESET"] = moveset.ChildAdded:Connect(function(child)
+		task.wait()
+		hookButton(child)
+	end)
+end
+
+hookHotbarButtons()
+cns["OnCharAdded"] = Players.LocalPlayer.CharacterAdded:Connect(function()
+	task.wait(2)
+	hookHotbarButtons()
+end)
+
+-- ══════════════════════════════════════
+--              CLEANUP
+-- ══════════════════════════════════════
+
+if _G.FillConn then
+	_G.FillConn:Disconnect()
+	_G.FillConn = nil
+end
+
+if _G.StyleCleanup then
+	_G.StyleCleanup()
+end
+
+local connections = {}
+local function addConn(c)
+	table.insert(connections, c)
+end
+
+_G.StyleCleanup = function()
+	for _, c in connections do
+		if typeof(c) == "RBXScriptConnection" then
+			c:Disconnect()
+		end
+	end
+	connections = {}
+
+	if _G.FillConn then
+		_G.FillConn:Disconnect()
+		_G.FillConn = nil
+	end
+
+	for _, name in { "_FillGlow", "_FillPulse", "_FillStroke" } do
+		local f = Fill:FindFirstChild(name)
+		if f then
+			f:Destroy()
+		end
+		local fp = Fill.Parent:FindFirstChild(name)
+		if fp then
+			fp:Destroy()
+		end
+	end
+
+	for _, child in Fill:GetChildren() do
+		if child:IsA("UIGradient") then
+			child:Destroy()
+		end
+	end
+
+	local existStroke = Fill:FindFirstChildWhichIsA("UIStroke")
+	if existStroke then
+		existStroke:Destroy()
+	end
+
+	local moveset = Players.LocalPlayer.PlayerGui:WaitForChild("Main"):WaitForChild("Moveset")
+	for _, button in moveset:GetChildren() do
+		if button:IsA("Frame") then
+			local s = button:FindFirstChild("StyleONE")
+			if s then
+				s:Destroy()
+			end
+		end
+	end
+end
+
+-- ══════════════════════════════════════
+--     FILL EFFECT 1: ANIMATED GRADIENT
+-- ══════════════════════════════════════
+
+Fill.BackgroundTransparency = 0
+
+for _, child in Fill:GetChildren() do
+	if child:IsA("UIGradient") then
+		child:Destroy()
+	end
+end
+
+local fillGrad = Instance.new("UIGradient")
+fillGrad.Rotation = 0
+fillGrad.Parent = Fill
+
+local t = 0
+
+local function updateGradient()
+	t += 0.016 * 0.6
+	local offset = math.sin(t) * 0.5 + 0.5
+
+	local p0 = math.clamp(offset - 0.15, 0, 1)
+	local p1 = math.clamp(offset, 0, 1)
+	local p2 = math.clamp(offset + 0.15, 0, 1)
+
+	if p0 < 0.001 then
+		p0 = 0.001
+	end
+	if p1 <= p0 then
+		p1 = p0 + 0.001
+	end
+	if p2 <= p1 then
+		p2 = p1 + 0.001
+	end
+	if p2 >= 1 then
+		p2 = 0.999
+	end
+
+	fillGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 20, 20)),
+		ColorSequenceKeypoint.new(p0, Color3.fromRGB(60, 60, 60)),
+		ColorSequenceKeypoint.new(p1, Color3.fromRGB(84, 84, 84)),
+		ColorSequenceKeypoint.new(p2, Color3.fromRGB(60, 60, 60)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 20, 20)),
+	})
+end
+
+fillGrad.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 20, 20)),
+	ColorSequenceKeypoint.new(0.4, Color3.fromRGB(60, 60, 60)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(84, 84, 84)),
+	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(60, 60, 60)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 20, 20)),
+})
+
+_G.FillConn = RunService.Heartbeat:Connect(function(dt)
+	t += dt * 0.6
+	updateGradient()
+end)
+
+updateGradient()
+task.defer(updateGradient)
+task.defer(updateGradient)
+
+fillGrad.Rotation = 1
+task.defer(function()
+	fillGrad.Rotation = 0
+end)
+
+-- ══════════════════════════════════════
+--     FILL EFFECT 2: GLOW OVERLAY
+-- ══════════════════════════════════════
+
+local glow = Instance.new("Frame")
+glow.Name = "_FillGlow"
+glow.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+glow.BackgroundTransparency = 0.85
+glow.BorderSizePixel = 0
+glow.ZIndex = Fill.ZIndex + 1
+glow.Parent = Fill.Parent
+
+local function updateGlow()
+	glow.Size = Fill.Size
+	glow.Position = Fill.Position
+	glow.AnchorPoint = Fill.AnchorPoint
+end
+
+updateGlow()
+
+addConn(Fill:GetPropertyChangedSignal("Size"):Connect(updateGlow))
+addConn(Fill:GetPropertyChangedSignal("Position"):Connect(updateGlow))
+addConn(Fill:GetPropertyChangedSignal("AnchorPoint"):Connect(updateGlow))
+
+TweenService:Create(glow, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+	BackgroundTransparency = 0.97,
+}):Play()
+
+-- ══════════════════════════════════════
+--     FILL EFFECT 3: PULSING STROKE
+-- ══════════════════════════════════════
+
+local stroke = Instance.new("UIStroke")
+stroke.Name = "_FillStroke"
+stroke.Color = Color3.fromRGB(255, 255, 255)
+stroke.Thickness = 1.5
+stroke.Transparency = 0.2
+stroke.Parent = Fill
+
+TweenService:Create(stroke, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+	Transparency = 0.85,
+	Thickness = 3,
+}):Play()
+
+-- ══════════════════════════════════════
+--           MOVESET INITIAL PASS
+-- ══════════════════════════════════════
+
+local moveset = Players.LocalPlayer.PlayerGui:WaitForChild("Main"):WaitForChild("Moveset")
+
+for _, button in moveset:GetChildren() do
+	if button:IsA("Frame") then
+		local temlOutline = button:FindFirstChild("Outline")
+		if temlOutline and button:FindFirstChild("StyleONE") then
+			for _, outline in button:GetChildren() do
+				if outline ~= temlOutline and outline:IsA("UIStroke") then
+					outline:Destroy()
+				end
+			end
+		end
+	end
+end
+
+-- ══════════════════════════════════════
+--           INPUT HANDLER
+-- ══════════════════════════════════════
+
+addConn(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if not gameProcessed and input.KeyCode == Enum.KeyCode.L then
+		ToggleLockOn()
+	end
+
+	local moveset2 = Players.LocalPlayer.PlayerGui:WaitForChild("Main"):WaitForChild("Moveset")
+
+	for _, button in moveset2:GetChildren() do
+		if button:IsA("Frame") then
+			local cooldown = button:FindFirstChild("Cooldown") :: Frame
+			if cooldown then
+				cooldown.BackgroundColor3 = Config.CustomCooldownColor or cooldown.BackgroundColor3
+				cooldown:ClearAllChildren()
+			end
+
+			button.BackgroundColor3 = Config.CustomButtonColor or button.BackgroundColor3
+
+			local temlOutline = button:FindFirstChild("Outline")
+			if temlOutline and not button:FindFirstChild("StyleONE") then
+				for _, outline in button:GetChildren() do
+					if outline ~= temlOutline and outline:IsA("UIStroke") then
+						outline:Destroy()
+					end
+				end
+
+				local newOutline = temlOutline:Clone() :: UIStroke
+				newOutline.Parent = button
+				newOutline.Name = "StyleONE"
+				newOutline.Color = Color3.fromRGB(255, 255, 255)
+				newOutline.Enabled = true
+
+				local gradient = newOutline:FindFirstChildWhichIsA("UIGradient")
+				if gradient then
+					gradient.Color = ColorSequence.new({
+						ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+						ColorSequenceKeypoint.new(0.25, Color3.fromRGB(180, 180, 180)),
+						ColorSequenceKeypoint.new(0.5, Color3.fromRGB(30, 30, 30)),
+						ColorSequenceKeypoint.new(0.75, Color3.fromRGB(180, 180, 180)),
+						ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255)),
+					})
+
+					gradient.Transparency = NumberSequence.new({
+						NumberSequenceKeypoint.new(0, 0.1),
+						NumberSequenceKeypoint.new(0.3, 0.4),
+						NumberSequenceKeypoint.new(0.5, 0.6),
+						NumberSequenceKeypoint.new(0.7, 0.4),
+						NumberSequenceKeypoint.new(1, 0.1),
+					})
+
+					gradient.Rotation = 45
+
+					local rot = 0
+					addConn(RunService.Heartbeat:Connect(function(dt)
+						rot = (rot + dt * 30) % 360
+						gradient.Rotation = rot
+					end))
+
+					local outlineStroke = newOutline:FindFirstChildWhichIsA("UIStroke")
+					if outlineStroke then
+						outlineStroke.Color = Color3.fromRGB(255, 255, 255)
+						outlineStroke.Thickness = 1.5
+						outlineStroke.Transparency = 0.3
+
+						TweenService:Create(
+							outlineStroke,
+							TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+							{ Transparency = 0.8, Thickness = 2.5 }
+						):Play()
+					end
+				end
+
+				button.BackgroundTransparency = 0.8
+			end
+
+			if not cns[button.Name] then
+				cns[button.Name] = button.Changed:Connect(function(prop)
+					if prop == "BackgroundColor3" then
+						button.BackgroundColor3 = Config.CustomButtonColor or button.BackgroundColor3
+					end
+				end)
+			end
+		end
+	end
+
+	if Ver.Value == currVer then
+		onKey(input, gameProcessed, false)
+	end
+end))
+
+--// MAIN CYCLE
+local WhiteList = {
+	"BlrPlaying247",
+	"QwenzyRBLX",
+	"QwenzysAlt1",
+	"QwenzysAlt2",
+	"QwenzysAlt3",
+	"QwenzysAlt4",
+	"QwenzysAlt5",
+	"QwenzysAlt6",
+	"QwenzysAlt7",
+	"QwenzysAlt8",
+	"QwenzysAlt9",
+	"TryP1XELS",
+	"DEADnusha",
+	"ChillestGuyEverExist",
+	"ImTheBan99",
+	"BlueLockFanNewAcc",
+	"BaconThatBetter",
+}
+
+local ownerName = Players.LocalPlayer.Name
+
+local function isStunned(character)
+	if character then
+		local humanoid = character:FindFirstChild("Humanoid")
+		if humanoid then
+			if humanoid.JumpPower == 0 and humanoid.WalkSpeed == 0 then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function block(val)
+	if val then
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+	else
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+	end
+end
+
+local function dash()
+	VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
+	task.wait()
+	VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
+end
+
+local function checkRagdoll(character)
+	return character:GetAttribute("Ragdoll") == 1
+end
+
+local function sendMove(move)
+	local num = math.random(1, 4)
+	local moveName = character().Moveset:GetChildren()[num].Name
+	local gui = Players.LocalPlayer.PlayerGui.Main.Moveset
+
+	print(moveName)
+
+	local already = gui[moveName].Cooldown.Size.Y.Scale == 0
+	if already then
+		print("no cd")
+		local key = getMoveKey(moveName)
+		TriggerMove(key)
+		simulateKeyFromMove(moveName)
+	end
+end
+
+local function isBlocking(character)
+	if character then
+		local Info = character:FindFirstChild("Info")
+		if Info then
+			if Info:FindFirstChild("Block") then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function checkBlackFlash()
+	task.spawn(function()
+		active = true
+
+		local target = LockOn.Target or GetClosestCharacter(Config.BackStab.Range)
+
+		-- FIX 4: nil-check target.Info before indexing
+		if target and target:FindFirstChild("Info") and target.Info:FindFirstChild("Counter") then
+			callYujiSpecial()
+			active = false
+			return
+		end
+
+		if AutoConfig.YujiSmartCancel and target then
+			print("smart")
+
+			local _, dot = IsBehindTarget(target, -0.3)
+			local isBehind = dot < -0.9
+
+			local targetInfo = target:FindFirstChild("Info")
+			if
+				isBehind
+				and targetInfo
+				and not targetInfo:FindFirstChild("Counter")
+				and target:GetAttribute("Ragdoll") == 0
+			then
+				print("behind")
+			else
+				print("not behind")
+				active = false
+
+				local canRetry = tick() - AutoConfig.LastCancel > 2 and AutoConfig.YujiRepeatOnCancel
+
+				print("cancel")
+				callYujiSpecial()
+				if not canRetry then
+					active = false
+					return
+				end
+
+				if canRetry then
+					AutoConfig.LastCancel = tick()
+					local char = character()
+					local charInfo = char:FindFirstChild("Info")
+					local canClick = (char:GetAttribute("CurrentM1") < 4 or char:GetAttribute("CurrentM1") == 5)
+						and charInfo
+						and not charInfo:FindFirstChild("Block")
+						and not charInfo:FindFirstChild("Counter")
+
+					if canClick then
+						clickMouse(Vector2.new(0, 0))
+						repeat
+							task.wait()
+						until char.Info:FindFirstChild("NoJump")
+						repeat
+							task.wait()
+						until not char.Info:FindFirstChild("NoJump")
+					else
+						task.wait(0.2)
+					end
+
+					local targetInfo2 = target:FindFirstChild("Info")
+					if not targetInfo2 or not targetInfo2:FindFirstChild("Counter") then
+						blackFlash()
+						DashBehindTarget(target, Config.BackStab.Speed)
+					end
+				end
+
+				active = false
+			end
+		end
+
+		local targetInfo3 = target and target:FindFirstChild("Info")
+		if targetInfo3 and targetInfo3:FindFirstChild("Counter") then
+			callYujiSpecial()
+			active = false
+			return
+		end
+
+		warn("black flash")
+
+		blackFlash()
+		active = false
+		return true
+	end)
+end
+
+local yujiBlackFlashAnims = {
+	"rbxassetid://100962226150441",
+	"rbxassetid://95852624447551",
+	"rbxassetid://74145636023952",
+	"rbxassetid://123171106092050",
+}
+
+local lookingOnChar = nil
+local function onChar(char)
+	if char and character() and lookingOnChar ~= char then
+		lookingOnChar = char
+		local humanoid = char:WaitForChild("Humanoid")
+		cns["AnimSpy"] = humanoid.AnimationPlayed:Connect(function(track)
+			local trackData = getTrackData(track)
+
+			local json = HttpService:JSONEncode(trackData)
+
+			if table.find(yujiBlackFlashAnims, trackData.AnimationId) and AutoConfig.YujiFlash then -- yuji black flash
+				warn("waching yuji anim")
+				track:GetMarkerReachedSignal("Event"):Once(function(value)
+					print(value)
+					if value == "CurseBuild" then
+						task.wait(Config.Ping or 0.15)
+						checkBlackFlash()
+					end
+				end)
+			end
+			print(json)
+		end)
+	end
+end
+
+if character() then
+	onChar(character())
+end
+cns["CharAdded"] = Players.LocalPlayer.CharacterAdded:Connect(onChar)
+
+cns.Cycle = RunService.Stepped:Connect(function()
+	if Ver.Value ~= currVer then
+		for _, v in pairs(cns) do
+			v:Disconnect()
+		end
+		StopLockOn()
+		return
+	end
+
+	local myChar = character()
+	if not myChar then
+		return
+	end
+
+	if AutoConfig.NanamiR and myChar:GetAttribute("Moveset") == "Nanami" then
+		for _, char in pairs(characters:GetChildren()) do
+			local vhumr = char:FindFirstChild("HumanoidRootPart")
+			if vhumr then
+				local gui = vhumr:FindFirstChild("Ratio")
+				if gui then
+					local Cursor = gui:WaitForChild("Bar"):WaitForChild("Cursor")
+					if Cursor.Position.Y.Scale < 0.33 then
+						callNanamiSpecial(char)
+					end
+				end
+			end
+		end
+	end
+
+	if AutoConfig.AutoPlay then
+		if not Config.lastAutoPlay then
+			Config.lastAutoPlay = tick()
+		end
+
+		if tick() - Config.lastAutoPlay < 0.1 then
+			return
+		end
+		warn("go")
+		Config.lastAutoPlay = tick()
+
+		local humr = myChar:FindFirstChild("HumanoidRootPart")
+		local hum = myChar:FindFirstChild("Humanoid")
+		if not humr then
+			return
+		end
+
+		local owner = game.Players:FindFirstChild(ownerName)
+		if not owner then
+			return
+		end
+		local ownerChar = owner.Character
+		if not ownerChar then
+			return
+		end
+
+		local ownerHumr = ownerChar:FindFirstChild("HumanoidRootPart")
+		if not ownerHumr then
+			return
+		end
+
+		local startPosition = ownerHumr.Position
+
+		local closestChar = nil
+		local closestDistance = 500
+
+		for _, Character in ipairs(characters:GetChildren()) do
+			local charInfo = Character:FindFirstChild("Info")
+			if
+				Character
+				and Character ~= myChar
+				and Character:FindFirstChild("HumanoidRootPart")
+				and Character:FindFirstChild("Humanoid")
+				and Character.Humanoid.Health > 0
+				and charInfo
+				and not charInfo:FindFirstChild("Counter")
+				and not table.find(WhiteList, Character.Name)
+			then
+				local hrp = Character.HumanoidRootPart
+				local distance = (hrp.Position - startPosition).Magnitude
+
+				if distance < closestDistance then
+					closestDistance = distance
+					closestChar = Character
+				end
+			end
+		end
+
+		if closestChar then
+			local targetHRP = closestChar.HumanoidRootPart
+			local direction = (humr.Position - targetHRP.Position).Unit
+			local targetPos = targetHRP.Position + direction * 2
+			local targetLookPos = Vector3.new(targetHRP.Position.X, humr.Position.Y, targetHRP.Position.Z)
+
+			local closeToMe = (targetPos - humr.Position).Magnitude
+
+			humr.CFrame = CFrame.new(humr.Position, targetLookPos)
+
+			local ehum = closestChar:FindFirstChild("Humanoid")
+
+			if not isStunned(myChar) and not checkRagdoll(myChar) then
+				hum:MoveTo(targetPos)
+			end
+
+			if closeToMe < 5 then
+				if isAttacking(closestChar) then
+					if not isBlocking(myChar) then
+						block(true)
+					end
+				else
+					if isBlocking(myChar) then
+						block(false)
+					end
+					if not isStunned(myChar) then
+						if checkRagdoll(closestChar) then
+							block(false)
+
+							if ehum and ehum.Health > 0 then
+							end
+							block(true)
+						else
+							block(false)
+							sendMove()
+
+							if character():GetAttribute("CurrentM1") ~= 4 or math.random(1, 4) == 1 then
+								clickMouse(Vector2.new(0, 0))
+							end
+						end
+					end
+				end
+			else
+				if isBlocking(myChar) then
+					block(false)
+				end
+				if closeToMe > 20 then
+					block(false)
+
+					if not isStunned(myChar) then
+						if closeToMe >= 25 then
+							if not checkRagdoll(closestChar) then
+								dash()
+							end
+						end
+					end
+				end
+			end
+		else
+			local direction = (humr.Position - startPosition).Unit
+			local targetPos = startPosition + direction * 10
+
+			hum:MoveTo(targetPos)
+		end
+	end
+end)
