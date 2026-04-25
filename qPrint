@@ -1,0 +1,41 @@
+local qPrint = {
+	Colors = {
+		["Green"] = "0,255,0", -- color in rgb
+		["Cyan"] = "33, 161, 163",
+	},
+}
+
+	game:GetService("RunService").Heartbeat:Connect(function()
+		if game:GetService("CoreGui"):FindFirstChild("DevConsoleMaster") then
+			for _, v in pairs(game:GetService("CoreGui"):FindFirstChild("DevConsoleMaster"):GetDescendants()) do
+				if v:IsA("TextLabel") then
+					v.RichText = true
+				end
+			end
+		end
+	end)
+
+qPrint.execute = function(text, color, size)
+	if not color then
+		color = "Green"
+	end
+	if not size then
+		size = 15
+	end
+	if not qPrint.Colors[color] then
+		warn("Color was not found!")
+		return
+	end
+
+	local Text = '<font color="rgb(' .. qPrint.Colors[color] .. ')"'
+	if size then
+		Text = Text .. ' size="' .. tostring(size) .. '"'
+	end
+	Text = Text .. ">" .. tostring(text) .. "</font>"
+	print(Text)
+end
+
+
+return function(text,color,size)
+	qPrint.execute(text,color,size)
+end
