@@ -1,1 +1,745 @@
+--!nocheck
 
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+
+local function TriggerMove(key)
+	VirtualInputManager:SendKeyEvent(true, key, false, game)
+	VirtualInputManager:SendKeyEvent(false, key, false, game)
+end
+local Camera = workspace.CurrentCamera
+
+--// Config
+
+local HttpService = game:GetService("HttpService")
+
+local folder = "!QwenzyHub"
+local file = folder .. "/LockedConfig.json"
+
+local DEFAULT_CONFIG = {
+	Speed = 0,
+
+	InfStamina = false,
+
+	BallESP = false,
+
+	AutoDribble = false,
+	DribbleWait = 0.05,
+	DribbleKey = "Q",
+	DribbleAnimIds = {},
+	ad_dist = 30,
+}
+
+if not isfolder(folder) then
+	makefolder(folder)
+end
+
+local Config = {}
+
+local function cloneDefault()
+	local t = {}
+
+	for key, value in pairs(DEFAULT_CONFIG) do
+		t[key] = value
+	end
+
+	return t
+end
+
+local function saveCFG()
+	writefile(file, HttpService:JSONEncode(Config))
+end
+
+local function loadCFG()
+	if not isfile(file) then
+		Config = cloneDefault()
+		saveCFG()
+		return Config
+	end
+
+	local success, data = pcall(function()
+		return HttpService:JSONDecode(readfile(file))
+	end)
+
+	if not success or type(data) ~= "table" then
+		Config = cloneDefault()
+		saveCFG()
+		return Config
+	end
+
+	for key, value in pairs(DEFAULT_CONFIG) do
+		if data[key] == nil then
+			data[key] = value
+		end
+	end
+
+	Config = data
+	saveCFG()
+
+	return Config
+end
+
+local function setCFG(key, value)
+	Config[key] = value
+	saveCFG()
+end
+
+local function getCFG(key)
+	return Config[key]
+end
+
+local function resetCFG()
+	Config = cloneDefault()
+	saveCFG()
+	return Config
+end
+
+loadCFG()
+
+-- WindUI loader
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+	Title = "Qwenzy hub  @mrqwenzy", -- CHANGE TITLE HERE!
+	Theme = "Dark",
+	Transparent = true,
+	Resizable = true,
+
+	Size = UDim2.fromOffset(580, 460),
+	MinSize = Vector2.new(560, 350),
+	MaxSize = Vector2.new(850, 560),
+
+	SideBarWidth = 200,
+	BackgroundImageTransparency = 0.42,
+	HideSearchBar = true,
+	ScrollBarEnabled = false,
+})
+
+Window:EditOpenButton({
+	Title = "Open",
+	Icon = "external-link",
+	CornerRadius = UDim.new(0, 16),
+	StrokeThickness = 2,
+	Color = ColorSequence.new(Color3.fromHex("#453e41"), Color3.fromHex("#000000")),
+	OnlyMobile = false,
+	Enabled = true,
+	Draggable = true,
+})
+
+local KeyNames = {
+	[1] = "One",
+	[2] = "Two",
+	[3] = "Three",
+	[4] = "Four",
+	[5] = "Five",
+	[6] = "Six",
+	[7] = "Seven",
+	[8] = "Eight",
+	[9] = "Nine",
+	[0] = "Zero",
+}
+
+WindUI:Notify({ Title = "Have fun", Content = "By @mrqwenzy", Duration = 6.5, Image = "laugh" })
+
+local Ver = game:GetService("CoreGui"):FindFirstChild("QwenzyBoosting")
+if not Ver then
+	Ver = Instance.new("NumberValue", game:GetService("CoreGui"))
+	Ver.Name = "QwenzyBoosting"
+	Ver.Value = 0
+end
+Ver.Value = Ver.Value + 1
+local currVer = Ver.Value
+local cns = {}
+
+--// SHARED HELPERS
+
+local Config = {}
+local function clickMouse(location)
+	local mouseLocation = UserInputService:GetMouseLocation()
+	VirtualInputManager:SendMouseButtonEvent(
+		location and location.X or mouseLocation.X,
+		location and location.Y or mouseLocation.Y,
+		0,
+		true,
+		game,
+		0
+	)
+	task.wait()
+	VirtualInputManager:SendMouseButtonEvent(
+		location and location.X or mouseLocation.X,
+		location and location.Y or mouseLocation.Y,
+		0,
+		false,
+		game,
+		0
+	)
+end
+
+local function safeCall(fn, ...)
+	local ok, result = pcall(fn, ...)
+	if ok then
+		return result
+	end
+	return nil
+end
+
+local character = function()
+	return Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+end
+local getcharacter = function()
+	return Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+end
+local ESPFolder = Instance.new("Folder")
+ESPFolder.Name = "QwenzyESP"
+ESPFolder.Parent = game:GetService("CoreGui")
+
+local ballESP = {
+	tracer = nil, -- Drawing line
+	distLabel = nil, -- Drawing text
+}
+
+local function playAnimation(char: Model, anim: Animation | string)
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		return
+	end
+
+	-- Handle string ID or Animation instance
+	local animation
+	if typeof(anim) == "string" or typeof(anim) == "number" then
+		animation = Instance.new("Animation")
+		animation.AnimationId = "rbxassetid://" .. tostring(anim):match("%d+")
+	elseif typeof(anim) == "Instance" and anim:IsA("Animation") then
+		animation = anim
+	else
+		warn("Invalid animation argument")
+		return
+	end
+
+	local track = animator:LoadAnimation(animation)
+	track:Play()
+	return track -- return track so you can stop/manipulate it later
+end
+local function getClosestCharacter(folder, distance)
+	local target = nil
+	local closestDistance = distance
+
+	for _, currChar in ipairs(folder:GetChildren()) do
+		local rootPart = currChar:FindFirstChild("HumanoidRootPart")
+		if rootPart and currChar ~= character() then
+			local dist = (rootPart.Position - getcharacter().HumanoidRootPart.Position).Magnitude
+			if dist < closestDistance then
+				closestDistance = dist
+				target = currChar
+			end
+		end
+	end
+
+	return target, closestDistance
+end
+local function getBall()
+	return safeCall(function()
+		return workspace.BallFolderServer.ballEntity.ServerBall
+	end)
+end
+local function createBallDrawings()
+	if ballESP.tracer then
+		return
+	end
+
+	ballESP.tracer = Drawing.new("Line")
+	ballESP.tracer.Visible = false
+	ballESP.tracer.Color = Color3.fromRGB(255, 0, 0)
+	ballESP.tracer.Thickness = 2
+	ballESP.tracer.Transparency = 1
+
+	ballESP.distLabel = Drawing.new("Text")
+	ballESP.distLabel.Visible = false
+	ballESP.distLabel.Color = Color3.fromRGB(255, 0, 0)
+	ballESP.distLabel.Size = 16
+	ballESP.distLabel.Outline = true
+	ballESP.distLabel.Center = true
+	ballESP.distLabel.Font = Drawing.Fonts.UI
+end
+
+local function removeBallDrawings()
+	if ballESP.tracer then
+		ballESP.tracer:Remove()
+		ballESP.tracer = nil
+	end
+	if ballESP.distLabel then
+		ballESP.distLabel:Remove()
+		ballESP.distLabel = nil
+	end
+end
+
+local function updateBallESP(ball, myChar)
+	if not Config.BallESP or not ball then
+		if ballESP.tracer then
+			ballESP.tracer.Visible = false
+			ballESP.distLabel.Visible = false
+		end
+		return
+	end
+
+	-- Hide when ball is inside our character
+	if not getBall() then
+		ballESP.tracer.Visible = false
+		ballESP.distLabel.Visible = false
+		return
+	end
+
+	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	if not myRoot then
+		ballESP.tracer.Visible = false
+		ballESP.distLabel.Visible = false
+		return
+	end
+
+	local ballPos, ballOnScreen = workspace.CurrentCamera:WorldToViewportPoint(getBall().Position)
+	local rootPos, rootOnScreen = workspace.CurrentCamera:WorldToViewportPoint(myRoot.Position)
+
+	if not ballOnScreen or not rootOnScreen then
+		ballESP.tracer.Visible = false
+		ballESP.distLabel.Visible = false
+		return
+	end
+
+	-- Tracer: from rootpart screen pos → ball screen pos
+	ballESP.tracer.From = Vector2.new(rootPos.X, rootPos.Y)
+	ballESP.tracer.To = Vector2.new(ballPos.X, ballPos.Y)
+	ballESP.tracer.Visible = true
+
+	-- Distance label above ball
+	local dist = math.floor((ball.Position - myRoot.Position).Magnitude)
+	ballESP.distLabel.Text = dist .. " studs"
+	ballESP.distLabel.Position = Vector2.new(ballPos.X, ballPos.Y - 18)
+	ballESP.distLabel.Visible = true
+end
+
+createBallDrawings()
+
+local dribbleConns = {}
+local dribbleDescConn = nil
+local isDribbling = false
+
+local function skey(kc, down)
+	setthreadidentity(8)
+	VirtualInputManager:SendKeyEvent(down, kc, false, game)
+end
+
+local function dribble()
+	if isDribbling then
+		return
+	end
+	isDribbling = true
+
+	local ok, kc = pcall(function()
+		return Enum.KeyCode[getCFG("DribbleKey")]
+	end)
+	if not ok or not kc then
+		isDribbling = false
+		return
+	end
+
+	if not pcall(skey, kc, true) then
+		keypress(kc.Value)
+	end
+	task.delay(getCFG("DribbleWait"), function()
+		if not pcall(skey, kc, false) then
+			keyrelease(kc.Value)
+		end
+		isDribbling = false
+	end)
+end
+
+local function hookDribble(hum)
+	local char = hum.Parent
+	if not char or dribbleConns[char] or char == Players.LocalPlayer.Character then
+		return
+	end
+
+	local anim = hum:FindFirstChildOfClass("Animator")
+	if not anim then
+		local c
+		c = hum.ChildAdded:Connect(function(ch)
+			if ch:IsA("Animator") then
+				c:Disconnect()
+				hookDribble(hum)
+			end
+		end)
+		return
+	end
+
+	dribbleConns[char] = anim.AnimationPlayed:Connect(function(trk)
+		if not Config.AutoDribble then
+			return
+		end
+
+		-- Distance check
+		local lhrp = character():FindFirstChild("HumanoidRootPart")
+		if not lhrp then
+			return
+		end
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if not hrp then
+			return
+		end
+		if (hrp.Position - lhrp.Position).Magnitude > getCFG("ad_dist") then
+			return
+		end
+
+		local animId = trk.Animation.AnimationId:match("%d+$")
+		if not animId then
+			return
+		end
+
+		-- Check if this animation ID is in our dribble list
+		local shouldDribble = false
+		for _, id in ipairs(getCFG("DribbleAnimIds")) do
+			if tostring(id) == tostring(animId) then
+				shouldDribble = true
+				break
+			end
+		end
+
+		if shouldDribble then
+			dribble()
+		end
+	end)
+end
+
+local function unhookDribble()
+	for _, c in next, dribbleConns do
+		c:Disconnect()
+	end
+	dribbleConns = {}
+end
+
+local function scanDribble()
+	for _, v in ipairs(game:GetDescendants()) do
+		if v:IsA("Humanoid") then
+			hookDribble(v)
+		end
+	end
+
+	if dribbleDescConn then
+		dribbleDescConn:Disconnect()
+	end
+	dribbleDescConn = game.DescendantAdded:Connect(function(d)
+		if d:IsA("Humanoid") then
+			task.wait(0.3)
+			hookDribble(d)
+		end
+	end)
+end
+
+--// CONFIG
+
+--// ============================================================
+--// TABS
+--// ============================================================
+Window:LockAll()
+
+-- MAIN TAB
+local MainTab = Window:Tab({
+	Title = "Main",
+	Icon = "crown",
+	Locked = false,
+})
+
+MainTab:Select()
+
+MainTab:Divider()
+MainTab:Section({
+	Title = "Main",
+})
+
+MainTab:Slider({
+	Title = "CFrame speed boost",
+	Step = 1,
+	Value = {
+		Min = 0,
+		Max = 100,
+		Default = getCFG("Speed"),
+	},
+	Callback = function(value)
+		Config.Speed = value
+		setCFG("Speed", value)
+	end,
+})
+
+MainTab:Toggle({
+	Title = "Inf stamina",
+	Icon = "checkmark",
+	Type = "Checkbox",
+	Flag = "staminaToggle",
+
+	Value = getCFG("InfStamina"),
+	Callback = function(state)
+		Config.InfStamina = state
+		setCFG("InfStamina", state)
+	end,
+})
+
+-- BALL  TAB
+local BallTab = Window:Tab({
+	Title = "Ball",
+	Icon = "volleyball",
+	Locked = false,
+})
+
+BallTab:Divider()
+BallTab:Section({
+	Title = "Ball",
+})
+
+BallTab:Toggle({
+	Title = "Esp",
+	Icon = "checkmark",
+	Type = "Checkbox",
+	Value = getCFG("BallESP"),
+	Callback = function(state)
+		Config.BallESP = state
+		setCFG("BallESP", state)
+	end,
+})
+
+-- AUTO DRIBBLE TAB
+local DribbleTab = Window:Tab({
+	Title = "Auto Dribble",
+	Icon = "zap",
+	Locked = false,
+})
+
+DribbleTab:Divider()
+DribbleTab:Section({
+	Title = "Auto Dribble",
+})
+
+DribbleTab:Toggle({
+	Title = "Auto Dribble",
+	Icon = "checkmark",
+	Type = "Checkbox",
+	Value = getCFG("AutoDribble"),
+	Callback = function(state)
+		Config.AutoDribble = state
+		setCFG("AutoDribble", state)
+
+		if state then
+			scanDribble()
+		else
+			unhookDribble()
+			isDribbling = false
+			if dribbleDescConn then
+				dribbleDescConn:Disconnect()
+				dribbleDescConn = nil
+			end
+		end
+	end,
+})
+
+DribbleTab:Slider({
+	Title = "Max Distance (studs)",
+	Step = 1,
+	Value = {
+		Min = 1,
+		Max = 100,
+		Default = getCFG("ad_dist"),
+	},
+	Callback = function(value)
+		Config.ad_dist = value
+		setCFG("ad_dist", value)
+	end,
+})
+
+DribbleTab:Textbox({
+	Title = "Dribble Key",
+	Description = "Key to press (e.g., E, Space, Q)",
+	Placeholder = "E",
+	RemoveTextAfterFocusLoss = false,
+	Default = getCFG("DribbleKey"),
+	Callback = function(value)
+		Config.DribbleKey = value:upper()
+		setCFG("DribbleKey", value:upper())
+	end,
+})
+
+DribbleTab:Textbox({
+	Title = "Animation IDs",
+	Description = "Comma-separated (rbxassetid://123456 or just 123456)",
+	Placeholder = "rbxassetid://123456,789012",
+	RemoveTextAfterFocusLoss = false,
+	Default = table.concat(getCFG("DribbleAnimIds"), ","),
+	Callback = function(value)
+		local ids = {}
+		for id in value:gmatch("[^,]+") do
+			local trimmed = id:match("^%s*(.-)%s*$")
+			if trimmed ~= "" then
+				-- Extract just the numbers from rbxassetid:// or plain ID
+				local numId = trimmed:match("rbxassetid://(%d+)") or trimmed:match("(%d+)")
+				if numId then
+					table.insert(ids, numId)
+				end
+			end
+		end
+		Config.DribbleAnimIds = ids
+		setCFG("DribbleAnimIds", ids)
+	end,
+})
+
+-- Other  TAB
+local OtherTab = Window:Tab({
+	Title = "Other",
+	Icon = "candy",
+	Locked = false,
+})
+
+OtherTab:Divider()
+OtherTab:Section({
+	Title = "Other",
+})
+
+OtherTab:Button({
+	Title = "Reedem codes",
+	Icon = "bird",
+	Callback = function()
+		local codes = { "20KFAVS", "25KFAVS", "5MILVISITS", "LONGSHUTDOWN", "RANKEDUPDATE", "TY20KLIKES", "VIPBUG" }
+
+		for _, code in codes do
+			print(code)
+			local result = game:GetService("ReplicatedStorage").REPLICATEDSTORAGE.Remotes.REDEEM_CODE:InvokeServer(code)
+
+			if result.Redeem then
+				local Text = result.Text
+				local rewards = HttpService:JSONEncode(result.Rewards)
+
+				WindUI:Notify({ Title = Text, Content = rewards, Duration = 2, Image = "laugh" })
+			else
+				local Text = result.Text
+				WindUI:Notify({ Title = code, Content = Text, Duration = 1, Image = "laugh" })
+			end
+			task.wait(3)
+		end
+	end,
+})
+
+local oldKick = 0
+local canDribble = true
+local function onChar(char)
+	if char then
+		local humanoid = char:WaitForChild("Humanoid")
+		local humr = char:WaitForChild("HumanoidRootPart")
+
+		if humanoid and humr then
+			local rpData = char:WaitForChild("CHARACTER")
+			if rpData then
+				local KickChargeMeter = rpData:WaitForChild("KickChargeMeter") :: NumberValue
+
+				if cns["KCM"] then
+					cns["KCM"]:Disconnect()
+				end
+
+				cns["KCM"] = KickChargeMeter.Changed:Connect(function()
+					local newVal = KickChargeMeter.Value
+					if newVal == 0 then
+						if oldKick > 90 and canDribble then
+							canDribble = false
+							task.delay(0.3, function()
+								canDribble = true
+							end)
+						end
+					end
+					oldKick = newVal
+				end)
+			end
+		end
+	end
+end
+
+cns.OnCharAdded = Players.LocalPlayer.CharacterAdded:Connect(function(a0: Model)
+	onChar(a0)
+	saveCFG()
+end)
+
+cns["OnPlrRemove"] = Players.PlayerRemoving:Connect(function(a0: Player, a1: Enum.PlayerExitReason)
+	saveCFG()
+end)
+
+task.spawn(function()
+	onChar(character())
+end)
+
+cns.Cycle = RunService.Stepped:Connect(function()
+	if Ver.Value ~= currVer then
+		for _, v in pairs(cns) do
+			v:Disconnect()
+		end
+		for _, v in pairs(dribbleConns) do
+			v:Disconnect()
+		end
+		if dribbleDescConn then
+			dribbleDescConn:Disconnect()
+		end
+		removeBallDrawings()
+		saveCFG()
+
+		return
+	end
+
+	if Config.InfStamina then
+		Players.LocalPlayer:SetAttribute("STAMINA", 99)
+	end
+
+	if getBall() then
+		updateBallESP(getBall(), character())
+	end
+
+	if getCFG("Speed") and getCFG("Speed") ~= 0 then
+		local humr = character().HumanoidRootPart
+		local vel = humr.AssemblyLinearVelocity
+
+		local flat = Vector3.new(vel.X, 0, vel.Z)
+		local speed = flat.Magnitude
+
+		if speed > 2 and not humr.Anchored then
+			local dir = flat.Unit
+			humr.CFrame += dir * (getCFG("Speed") / 100)
+		end
+	end
+end)
+
+Window:Close()
+Window:LockAll()
+
+WindUI:Popup({
+	Title = "Updates still coming",
+	Icon = "info",
+	Content = "Script is in beta.",
+	Buttons = {
+		{
+			Title = "skip",
+			Callback = function()
+				Window:Open()
+				Window:UnlockAll()
+			end,
+			Variant = "Tertiary",
+		},
+		{
+			Title = "Okie",
+			Icon = "arrow-right",
+			Callback = function()
+				Window:Open()
+				Window:UnlockAll()
+			end,
+			Variant = "Primary",
+		},
+	},
+})
