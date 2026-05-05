@@ -1,3 +1,4 @@
+-- v2
 local a
 a = {
 	cache = {},
@@ -345,6 +346,15 @@ do
 
 				LabelBackground = Color3.fromHex("#e8ebff"),
 				LabelBackgroundTransparency = 0.95,
+
+				-- Effects and Borders
+				BorderColor = Color3.fromHex("#202032"),
+				BorderTransparency = 0.5,
+				BorderThickness = 1,
+				InputBorderColor = Color3.fromHex("#303abe"),
+				InputBorderTransparency = 0.4,
+				ButtonBorderColor = Color3.fromHex("#303abe"),
+				ButtonBorderTransparency = 0.3,
 			}
 		end
 	end
@@ -423,6 +433,7 @@ do
 					Text = "",
 					TextColor3 = Color3.new(0, 0, 0),
 					TextSize = 14,
+					BorderSizePixel = 0,
 				},
 				ImageLabel = {
 					BackgroundTransparency = 1,
@@ -452,6 +463,10 @@ do
 				Blue = "#303abe",
 				White = "#e8ebff",
 				Grey = "#3a3e5c",
+				DarkBg = "#0a0a0e",
+				DarkCard = "#0e0e14",
+				Border = "#202032",
+				GlowBlue = "#4a5aef",
 			},
 			ThemeFallbacks = nil,
 			Shapes = {
@@ -1234,6 +1249,111 @@ do
 					math.clamp(C.G + z.G * A, 0, 1),
 					math.clamp(C.B + z.B * A, 0, 1)
 				)
+			end
+		end
+
+		function p.AddStroke(v, x, z, A)
+			if not v then
+				return
+			end
+			local B = r("UIStroke", {
+				Thickness = z or 1,
+				Color = x or Color3.fromHex("#202032"),
+				Transparency = A or 0.5,
+				ApplyStrokeMode = "Border",
+			})
+			B.Parent = v
+			return B
+		end
+
+		function p.AddBorder(v, x, z, A)
+			if not v then
+				return
+			end
+			p.AddStroke(v, x or Color3.fromHex("#202032"), z or 1, A or 0.5)
+		end
+
+		function p.ApplyElementStyle(v, x)
+			if not v then
+				return
+			end
+			x = x or {}
+			if x.Border then
+				p.AddBorder(
+					v,
+					Color3.fromHex(x.BorderColor or "#202032"),
+					x.BorderThickness or 1,
+					x.BorderTransparency or 0.5
+				)
+			end
+			if x.CornerRadius then
+				local z = r("UICorner", {
+					CornerRadius = UDim.new(0, x.CornerRadius),
+				})
+				z.Parent = v
+			end
+			if x.Padding then
+				local z = r("UIPadding", {
+					PaddingTop = UDim.new(0, x.Padding),
+					PaddingBottom = UDim.new(0, x.Padding),
+					PaddingLeft = UDim.new(0, x.Padding),
+					PaddingRight = UDim.new(0, x.Padding),
+				})
+				z.Parent = v
+			end
+			if x.Transparency ~= nil then
+				v.BackgroundTransparency = x.Transparency
+			end
+		end
+
+		function p.ApplyButtonStyle(v, x)
+			if not v then
+				return
+			end
+			x = x or {}
+			p.ApplyElementStyle(v, {
+				Border = true,
+				BorderColor = x.BorderColor or "#303abe",
+				BorderThickness = x.BorderThickness or 1,
+				BorderTransparency = x.BorderTransparency or 0.3,
+				CornerRadius = x.CornerRadius or 8,
+			})
+			if v:IsA("TextButton") or v:IsA("ImageButton") then
+				v.Focused:Connect(function()
+					local y = v:FindFirstChildOfClass("UIStroke")
+					if y then
+						u(y, 0.12, { Transparency = 0.1 }):Play()
+					end
+				end)
+			end
+		end
+
+		function p.ApplyKeysystemStyle(v)
+			if not v then
+				return
+			end
+			-- Add container styling
+			if v:IsA("Frame") or v:IsA("ScrollingFrame") then
+				if not v:FindFirstChildOfClass("UICorner") then
+					r("UICorner", {
+						CornerRadius = UDim.new(0, 10),
+					}).Parent = v
+				end
+				if v:FindFirstChildOfClass("UIStroke") == nil and v.BackgroundTransparency < 1 then
+					p.AddStroke(v, Color3.fromHex("#202032"), 1, 0.5)
+				end
+			end
+			-- Add glass effect for panels
+			if v:FindFirstChild("Glass-1") == nil and v:IsA("Frame") and v.Name:match("[Pp]anel") then
+				local x = r("ImageLabel", {
+					Image = "rbxassetid://97324581055162",
+					ImageTransparency = 0.8,
+					Size = UDim2.fromScale(1, 1),
+					BackgroundTransparency = 1,
+					ZIndex = v.ZIndex,
+				})
+				x.Name = "Glass-1"
+				x.Parent = v
 			end
 		end
 
