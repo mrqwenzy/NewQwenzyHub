@@ -1,4 +1,4 @@
--- v2
+-- wind ui
 local a
 a = {
 	cache = {},
@@ -3547,7 +3547,6 @@ do
 		local ac = ab.New
 
 		local ad, ae = unpack(a.load("p"))
-		local af = Instance.new("Folder", aa(game:GetService("Workspace")).CurrentCamera)
 
 		local function createAcrylic()
 			local ag = ac("Part", {
@@ -3580,7 +3579,6 @@ do
 				bottomRight = Vector2.new(),
 			}
 			local aj = createAcrylic()
-			aj.Parent = af
 
 			local function updatePositions(ak, al)
 				ai.topLeft = al
@@ -8332,7 +8330,6 @@ do
 
 		aa(game:GetService("UserInputService"))
 		aa(game:GetService("Players")).LocalPlayer:GetMouse()
-		local ac = aa(game:GetService("Workspace")).CurrentCamera
 
 		local ae = a.load("c")
 		local af = ae.New
@@ -8341,7 +8338,6 @@ do
 		local ah = a.load("v").New
 		local ai = a.load("m").New
 		local aj = a.load("L").New
-		local ak = workspace.CurrentCamera
 
 		local al = {
 			UICorner = 10,
