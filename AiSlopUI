@@ -11,9 +11,13 @@
 
 		local tab = Window:AddTab(text)           -> adds a tab to the left sidebar, returns a tab object
 		tab:AddLabel(text)                        -> adds a changeable text label, returns {SetText, Get}
+		tab:AddKeyLabel(caption, value)            -> split label: left = static caption (e.g.
+		                                              "Enter time"), right = changeable value,
+		                                              returns {SetText, Get} for the value side
 		tab:AddButton(text, callback)             -> adds a clickable button
 		tab:AddToggle(text, default, callback)    -> adds an animated toggle switch
 		tab:AddTextbox(placeholder, callback)     -> adds a text input box
+		tab:AddDivider()                          -> adds a thin horizontal separator line
 
 		-- Window:AddLabel/AddButton/AddToggle/AddTextbox also work directly as a
 		-- shortcut -- they apply to the most recently created tab (auto-creating
@@ -41,14 +45,14 @@ end
 ----------------------------------------------------------------
 local Theme = {
 	Background = Color3.fromRGB(15, 15, 15),
-	Panel = Color3.fromRGB(22, 22, 22),
-	Stroke = Color3.fromRGB(40, 40, 40),
-	Accent = Color3.fromRGB(255, 255, 255),
-	AccentDim = Color3.fromRGB(90, 90, 90),
-	Text = Color3.fromRGB(235, 235, 235),
-	SubText = Color3.fromRGB(150, 150, 150),
-	Font = Enum.Font.GothamMedium,
-	FontBold = Enum.Font.GothamBold,
+	Panel      = Color3.fromRGB(22, 22, 22),
+	Stroke     = Color3.fromRGB(40, 40, 40),
+	Accent     = Color3.fromRGB(255, 255, 255),
+	AccentDim  = Color3.fromRGB(90, 90, 90),
+	Text       = Color3.fromRGB(235, 235, 235),
+	SubText    = Color3.fromRGB(150, 150, 150),
+	Font       = Enum.Font.GothamMedium,
+	FontBold   = Enum.Font.GothamBold,
 }
 
 local function tween(obj, props, time, style, direction)
@@ -81,9 +85,7 @@ end
 ----------------------------------------------------------------
 -- clean up any previous instance so re-running the script doesn't duplicate
 local existing = parent:FindFirstChild("MinimalUI")
-if existing then
-	existing:Destroy()
-end
+if existing then existing:Destroy() end
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "MinimalUI"
@@ -168,10 +170,10 @@ CloseBtn.TextSize = 20
 CloseBtn.Parent = TitleBar
 
 CloseBtn.MouseEnter:Connect(function()
-	tween(CloseBtn, { TextColor3 = Theme.Accent }, 0.15)
+	tween(CloseBtn, {TextColor3 = Theme.Accent}, 0.15)
 end)
 CloseBtn.MouseLeave:Connect(function()
-	tween(CloseBtn, { TextColor3 = Theme.SubText }, 0.15)
+	tween(CloseBtn, {TextColor3 = Theme.SubText}, 0.15)
 end)
 CloseBtn.MouseButton1Click:Connect(function()
 	ScreenGui:Destroy()
@@ -236,10 +238,7 @@ do
 	local UIS = game:GetService("UserInputService")
 
 	TitleBar.InputBegan:Connect(function(input)
-		if
-			input.UserInputType == Enum.UserInputType.MouseButton1
-			or input.UserInputType == Enum.UserInputType.Touch
-		then
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
 			dragStart = input.Position
 			startPos = Main.Position
@@ -252,16 +251,12 @@ do
 	end)
 
 	UIS.InputChanged:Connect(function(input)
-		if
-			dragging
-			and (
-				input.UserInputType == Enum.UserInputType.MouseMovement
-				or input.UserInputType == Enum.UserInputType.Touch
-			)
-		then
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 			local delta = input.Position - dragStart
-			Main.Position =
-				UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+			Main.Position = UDim2.new(
+				startPos.X.Scale, startPos.X.Offset + delta.X,
+				startPos.Y.Scale, startPos.Y.Offset + delta.Y
+			)
 		end
 	end)
 end
@@ -311,9 +306,9 @@ local function selectTab(tabData)
 	for _, t in ipairs(tabs) do
 		local active = (t == tabData)
 		t.page.Visible = active
-		tween(t.button, { BackgroundColor3 = active and Color3.fromRGB(32, 32, 32) or Theme.Panel }, 0.15)
-		tween(t.indicator, { BackgroundTransparency = active and 0 or 1 }, 0.15)
-		tween(t.label, { TextColor3 = active and Theme.Text or Theme.SubText }, 0.15)
+		tween(t.button, {BackgroundColor3 = active and Color3.fromRGB(32, 32, 32) or Theme.Panel}, 0.15)
+		tween(t.indicator, {BackgroundTransparency = active and 0 or 1}, 0.15)
+		tween(t.label, {TextColor3 = active and Theme.Text or Theme.SubText}, 0.15)
 	end
 	currentPage = tabData.page
 end
@@ -355,6 +350,69 @@ local function createLabel(page, text)
 	return api
 end
 
+local function createDivider(page)
+	local holder = Instance.new("Frame")
+	holder.BackgroundTransparency = 1
+	holder.Size = UDim2.new(1, 0, 0, 9)
+	holder.LayoutOrder = nextOrder()
+	holder.Parent = page
+
+	local line = Instance.new("Frame")
+	line.AnchorPoint = Vector2.new(0, 0.5)
+	line.Position = UDim2.new(0, 0, 0.5, 0)
+	line.Size = UDim2.new(1, 0, 0, 1)
+	line.BackgroundColor3 = Theme.Stroke
+	line.BorderSizePixel = 0
+	line.Parent = holder
+
+	return holder
+end
+
+-- split label: left half is a static caption (e.g. "Enter time"), right half is a
+-- changeable value. Returns an object with :SetText(value) / :Get() for the value side.
+local function createKeyLabel(page, caption, value)
+	local holder = Instance.new("Frame")
+	holder.BackgroundTransparency = 1
+	holder.Size = UDim2.new(1, 0, 0, 26)
+	holder.LayoutOrder = nextOrder()
+	holder.Parent = page
+
+	local captionLabel = Instance.new("TextLabel")
+	captionLabel.BackgroundTransparency = 1
+	captionLabel.Size = UDim2.new(0.5, 0, 1, 0)
+	captionLabel.Font = Theme.Font
+	captionLabel.Text = caption or ""
+	captionLabel.TextColor3 = Theme.SubText
+	captionLabel.TextSize = 14
+	captionLabel.TextXAlignment = Enum.TextXAlignment.Left
+	captionLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	captionLabel.Parent = holder
+
+	local valueLabel = Instance.new("TextLabel")
+	valueLabel.BackgroundTransparency = 1
+	valueLabel.Position = UDim2.new(0.5, 0, 0, 0)
+	valueLabel.Size = UDim2.new(0.5, 0, 1, 0)
+	valueLabel.Font = Theme.Font
+	valueLabel.Text = value or ""
+	valueLabel.TextColor3 = Theme.Text
+	valueLabel.TextSize = 16
+	valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+	valueLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	valueLabel.Parent = holder
+
+	local api = {}
+
+	function api:SetText(newText)
+		valueLabel.Text = newText
+	end
+
+	function api:Get()
+		return valueLabel.Text
+	end
+
+	return api
+end
+
 local function createButton(page, text, callback)
 	local btn = Instance.new("TextButton")
 	btn.AutoButtonColor = false
@@ -370,18 +428,18 @@ local function createButton(page, text, callback)
 	local btnStroke = stroke(btn, Theme.Stroke, 1)
 
 	btn.MouseEnter:Connect(function()
-		tween(btn, { BackgroundColor3 = Color3.fromRGB(32, 32, 32) }, 0.15)
-		tween(btnStroke, { Color = Theme.AccentDim }, 0.15)
+		tween(btn, {BackgroundColor3 = Color3.fromRGB(32, 32, 32)}, 0.15)
+		tween(btnStroke, {Color = Theme.AccentDim}, 0.15)
 	end)
 	btn.MouseLeave:Connect(function()
-		tween(btn, { BackgroundColor3 = Theme.Panel }, 0.15)
-		tween(btnStroke, { Color = Theme.Stroke }, 0.15)
+		tween(btn, {BackgroundColor3 = Theme.Panel}, 0.15)
+		tween(btnStroke, {Color = Theme.Stroke}, 0.15)
 	end)
 	btn.MouseButton1Down:Connect(function()
-		tween(btn, { BackgroundColor3 = Color3.fromRGB(45, 45, 45) }, 0.08)
+		tween(btn, {BackgroundColor3 = Color3.fromRGB(45, 45, 45)}, 0.08)
 	end)
 	btn.MouseButton1Up:Connect(function()
-		tween(btn, { BackgroundColor3 = Color3.fromRGB(32, 32, 32) }, 0.15)
+		tween(btn, {BackgroundColor3 = Color3.fromRGB(32, 32, 32)}, 0.15)
 	end)
 	btn.MouseButton1Click:Connect(function()
 		if callback then
@@ -438,13 +496,8 @@ local function createToggle(page, text, default, callback)
 
 	clickArea.MouseButton1Click:Connect(function()
 		state = not state
-		tween(switchBG, { BackgroundColor3 = state and Theme.Accent or Color3.fromRGB(45, 45, 45) }, 0.2)
-		tween(
-			knob,
-			{ Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8) },
-			0.2,
-			Enum.EasingStyle.Back
-		)
+		tween(switchBG, {BackgroundColor3 = state and Theme.Accent or Color3.fromRGB(45, 45, 45)}, 0.2)
+		tween(knob, {Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)}, 0.2, Enum.EasingStyle.Back)
 		if callback then
 			task.spawn(callback, state)
 		end
@@ -477,10 +530,10 @@ local function createTextbox(page, placeholder, callback)
 	box.Parent = holder
 
 	box.Focused:Connect(function()
-		tween(boxStroke, { Color = Theme.Accent }, 0.15)
+		tween(boxStroke, {Color = Theme.Accent}, 0.15)
 	end)
 	box.FocusLost:Connect(function(enterPressed)
-		tween(boxStroke, { Color = Theme.Stroke }, 0.15)
+		tween(boxStroke, {Color = Theme.Stroke}, 0.15)
 		if callback then
 			task.spawn(callback, box.Text, enterPressed)
 		end
@@ -529,12 +582,15 @@ function Window:AddTab(text)
 	label.Parent = btn
 
 	local page = newPage()
-	local tabData = { button = btn, indicator = indicator, label = label, page = page }
+	local tabData = {button = btn, indicator = indicator, label = label, page = page}
 	table.insert(tabs, tabData)
 
 	-- element methods scoped to this tab's own page
 	function tabData:AddLabel(labelText)
 		return createLabel(page, labelText)
+	end
+	function tabData:AddKeyLabel(caption, value)
+		return createKeyLabel(page, caption, value)
 	end
 	function tabData:AddButton(btnText, callback)
 		return createButton(page, btnText, callback)
@@ -545,15 +601,18 @@ function Window:AddTab(text)
 	function tabData:AddTextbox(placeholder, callback)
 		return createTextbox(page, placeholder, callback)
 	end
+	function tabData:AddDivider()
+		return createDivider(page)
+	end
 
 	btn.MouseEnter:Connect(function()
 		if currentPage ~= page then
-			tween(btn, { BackgroundColor3 = Color3.fromRGB(28, 28, 28) }, 0.15)
+			tween(btn, {BackgroundColor3 = Color3.fromRGB(28, 28, 28)}, 0.15)
 		end
 	end)
 	btn.MouseLeave:Connect(function()
 		if currentPage ~= page then
-			tween(btn, { BackgroundColor3 = Theme.Panel }, 0.15)
+			tween(btn, {BackgroundColor3 = Theme.Panel}, 0.15)
 		end
 	end)
 	btn.MouseButton1Click:Connect(function()
@@ -583,6 +642,10 @@ function Window:AddLabel(text)
 	return autoTab():AddLabel(text)
 end
 
+function Window:AddKeyLabel(caption, value)
+	return autoTab():AddKeyLabel(caption, value)
+end
+
 function Window:AddButton(text, callback)
 	return autoTab():AddButton(text, callback)
 end
@@ -594,5 +657,10 @@ end
 function Window:AddTextbox(placeholder, callback)
 	return autoTab():AddTextbox(placeholder, callback)
 end
+
+function Window:AddDivider()
+	return autoTab():AddDivider()
+end
+
 
 return Window
