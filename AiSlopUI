@@ -1,0 +1,598 @@
+--[[
+	MinimalUI - Black Minimalistic Animated UI Library
+	--------------------------------------------------
+	Usage: paste into a Script (server, via command bar) or a LocalScript.
+	Detects context automatically:
+		- If Players.LocalPlayer exists -> parents to PlayerGui (client context)
+		- If not (e.g. run from Studio command bar as "server") -> parents to StarterGui
+
+	API:
+		local UI = loadstring(...)()  -- or just run this script directly, it returns the Window
+
+		local tab = Window:AddTab(text)           -> adds a tab to the left sidebar, returns a tab object
+		tab:AddLabel(text)                        -> adds a changeable text label, returns {SetText, Get}
+		tab:AddButton(text, callback)             -> adds a clickable button
+		tab:AddToggle(text, default, callback)    -> adds an animated toggle switch
+		tab:AddTextbox(placeholder, callback)     -> adds a text input box
+
+		-- Window:AddLabel/AddButton/AddToggle/AddTextbox also work directly as a
+		-- shortcut -- they apply to the most recently created tab (auto-creating
+		-- a "General" tab if none exists yet).
+
+	Layout: left sidebar for tab navigation, right side shows the active tab's content.
+	Window is centered on screen, sized to roughly half the screen.
+]]
+
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+
+----------------------------------------------------------------
+-- PARENTING LOGIC
+----------------------------------------------------------------
+local parent
+if Players.LocalPlayer then
+	parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+else
+	parent = game:GetService("StarterGui")
+end
+
+----------------------------------------------------------------
+-- THEME
+----------------------------------------------------------------
+local Theme = {
+	Background = Color3.fromRGB(15, 15, 15),
+	Panel = Color3.fromRGB(22, 22, 22),
+	Stroke = Color3.fromRGB(40, 40, 40),
+	Accent = Color3.fromRGB(255, 255, 255),
+	AccentDim = Color3.fromRGB(90, 90, 90),
+	Text = Color3.fromRGB(235, 235, 235),
+	SubText = Color3.fromRGB(150, 150, 150),
+	Font = Enum.Font.GothamMedium,
+	FontBold = Enum.Font.GothamBold,
+}
+
+local function tween(obj, props, time, style, direction)
+	local t = TweenService:Create(
+		obj,
+		TweenInfo.new(time or 0.2, style or Enum.EasingStyle.Quad, direction or Enum.EasingDirection.Out),
+		props
+	)
+	t:Play()
+	return t
+end
+
+local function corner(obj, radius)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius or 8)
+	c.Parent = obj
+	return c
+end
+
+local function stroke(obj, color, thickness)
+	local s = Instance.new("UIStroke")
+	s.Color = color or Theme.Stroke
+	s.Thickness = thickness or 1
+	s.Parent = obj
+	return s
+end
+
+----------------------------------------------------------------
+-- SCREEN GUI + MAIN FRAME
+----------------------------------------------------------------
+-- clean up any previous instance so re-running the script doesn't duplicate
+local existing = parent:FindFirstChild("MinimalUI")
+if existing then
+	existing:Destroy()
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MinimalUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = parent
+
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.AnchorPoint = Vector2.new(0.5, 0.5)
+Main.Position = UDim2.new(0.5, 0, 0.5, 0)
+Main.Size = UDim2.new(0, 560, 0, 420)
+Main.BackgroundColor3 = Theme.Background
+Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
+Main.Parent = ScreenGui
+corner(Main, 10)
+stroke(Main, Theme.Stroke, 1)
+
+local MainSizeConstraint = Instance.new("UISizeConstraint")
+MainSizeConstraint.MinSize = Vector2.new(420, 320)
+MainSizeConstraint.MaxSize = Vector2.new(720, 540)
+MainSizeConstraint.Parent = Main
+
+-- subtle drop shadow feel via a second stroke gradient (kept minimal)
+local UIGradientStroke = Instance.new("UIGradient")
+UIGradientStroke.Color = ColorSequence.new(Theme.Stroke, Theme.Background)
+UIGradientStroke.Rotation = 90
+
+-- Title bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.BackgroundColor3 = Theme.Panel
+TitleBar.BorderSizePixel = 0
+TitleBar.Size = UDim2.new(1, 0, 0, 42)
+TitleBar.Parent = Main
+corner(TitleBar, 10)
+
+-- mask the bottom corners of the title bar so only the top stays rounded
+local TitleBarMask = Instance.new("Frame")
+TitleBarMask.BackgroundColor3 = Theme.Panel
+TitleBarMask.BorderSizePixel = 0
+TitleBarMask.Position = UDim2.new(0, 0, 1, -10)
+TitleBarMask.Size = UDim2.new(1, 0, 0, 10)
+TitleBarMask.Parent = TitleBar
+
+local AccentDot = Instance.new("Frame")
+AccentDot.AnchorPoint = Vector2.new(0, 0.5)
+AccentDot.Position = UDim2.new(0, 16, 0.5, 0)
+AccentDot.Size = UDim2.new(0, 6, 0, 6)
+AccentDot.BackgroundColor3 = Theme.Accent
+AccentDot.Parent = TitleBar
+corner(AccentDot, 3)
+
+local Title = Instance.new("TextLabel")
+Title.BackgroundTransparency = 1
+Title.Position = UDim2.new(0, 32, 0, 0)
+Title.Size = UDim2.new(1, -48, 1, 0)
+Title.Font = Theme.FontBold
+Title.Text = "MINIMAL UI"
+Title.TextColor3 = Theme.Text
+Title.TextSize = 15
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TitleBar
+
+local TitleUnderline = Instance.new("Frame")
+TitleUnderline.BackgroundColor3 = Theme.Stroke
+TitleUnderline.BorderSizePixel = 0
+TitleUnderline.Position = UDim2.new(0, 0, 1, 0)
+TitleUnderline.Size = UDim2.new(1, 0, 0, 1)
+TitleUnderline.Parent = TitleBar
+
+-- Close button
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Position = UDim2.new(1, -34, 0, 6)
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Font = Theme.FontBold
+CloseBtn.Text = "×"
+CloseBtn.TextColor3 = Theme.SubText
+CloseBtn.TextSize = 20
+CloseBtn.Parent = TitleBar
+
+CloseBtn.MouseEnter:Connect(function()
+	tween(CloseBtn, { TextColor3 = Theme.Accent }, 0.15)
+end)
+CloseBtn.MouseLeave:Connect(function()
+	tween(CloseBtn, { TextColor3 = Theme.SubText }, 0.15)
+end)
+CloseBtn.MouseButton1Click:Connect(function()
+	ScreenGui:Destroy()
+end)
+
+-- Body: split into a left Sidebar (tab navigation) and a right PageArea (tab content)
+local Body = Instance.new("Frame")
+Body.Name = "Body"
+Body.BackgroundTransparency = 1
+Body.Position = UDim2.new(0, 0, 0, 42)
+Body.Size = UDim2.new(1, 0, 1, -42)
+Body.Parent = Main
+
+local Sidebar = Instance.new("Frame")
+Sidebar.Name = "Sidebar"
+Sidebar.BackgroundColor3 = Theme.Panel
+Sidebar.BorderSizePixel = 0
+Sidebar.Size = UDim2.new(0, 130, 1, 0)
+Sidebar.Parent = Body
+
+local SidebarDivider = Instance.new("Frame")
+SidebarDivider.BackgroundColor3 = Theme.Stroke
+SidebarDivider.BorderSizePixel = 0
+SidebarDivider.Position = UDim2.new(1, 0, 0, 0)
+SidebarDivider.Size = UDim2.new(0, 1, 1, 0)
+SidebarDivider.Parent = Sidebar
+
+local SidebarList = Instance.new("ScrollingFrame")
+SidebarList.BackgroundTransparency = 1
+SidebarList.BorderSizePixel = 0
+SidebarList.Size = UDim2.new(1, 0, 1, 0)
+SidebarList.CanvasSize = UDim2.new(0, 0, 0, 0)
+SidebarList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+SidebarList.ScrollBarThickness = 2
+SidebarList.ScrollBarImageColor3 = Theme.AccentDim
+SidebarList.Parent = Sidebar
+
+local SidebarPadding = Instance.new("UIPadding")
+SidebarPadding.PaddingTop = UDim.new(0, 10)
+SidebarPadding.PaddingLeft = UDim.new(0, 8)
+SidebarPadding.PaddingRight = UDim.new(0, 8)
+SidebarPadding.Parent = SidebarList
+
+local SidebarLayout = Instance.new("UIListLayout")
+SidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SidebarLayout.Padding = UDim.new(0, 4)
+SidebarLayout.Parent = SidebarList
+
+local PageArea = Instance.new("Frame")
+PageArea.Name = "PageArea"
+PageArea.BackgroundTransparency = 1
+PageArea.Position = UDim2.new(0, 130, 0, 0)
+PageArea.Size = UDim2.new(1, -130, 1, 0)
+PageArea.ClipsDescendants = true
+PageArea.Parent = Body
+
+----------------------------------------------------------------
+-- DRAGGABLE
+----------------------------------------------------------------
+do
+	local dragging, dragStart, startPos
+	local UIS = game:GetService("UserInputService")
+
+	TitleBar.InputBegan:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			dragging = true
+			dragStart = input.Position
+			startPos = Main.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+
+	UIS.InputChanged:Connect(function(input)
+		if
+			dragging
+			and (
+				input.UserInputType == Enum.UserInputType.MouseMovement
+				or input.UserInputType == Enum.UserInputType.Touch
+			)
+		then
+			local delta = input.Position - dragStart
+			Main.Position =
+				UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+----------------------------------------------------------------
+-- WINDOW API
+----------------------------------------------------------------
+local Window = {}
+local order = 0
+local function nextOrder()
+	order += 1
+	return order
+end
+
+local tabs = {}
+local currentPage = nil
+local lastTab = nil
+
+local function newPage()
+	local page = Instance.new("ScrollingFrame")
+	page.BackgroundTransparency = 1
+	page.BorderSizePixel = 0
+	page.Size = UDim2.new(1, 0, 1, 0)
+	page.CanvasSize = UDim2.new(0, 0, 0, 0)
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	page.ScrollBarThickness = 3
+	page.ScrollBarImageColor3 = Theme.AccentDim
+	page.Visible = false
+	page.Parent = PageArea
+
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 14)
+	pad.PaddingBottom = UDim.new(0, 16)
+	pad.PaddingLeft = UDim.new(0, 16)
+	pad.PaddingRight = UDim.new(0, 16)
+	pad.Parent = page
+
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 10)
+	layout.Parent = page
+
+	return page
+end
+
+local function selectTab(tabData)
+	for _, t in ipairs(tabs) do
+		local active = (t == tabData)
+		t.page.Visible = active
+		tween(t.button, { BackgroundColor3 = active and Color3.fromRGB(32, 32, 32) or Theme.Panel }, 0.15)
+		tween(t.indicator, { BackgroundTransparency = active and 0 or 1 }, 0.15)
+		tween(t.label, { TextColor3 = active and Theme.Text or Theme.SubText }, 0.15)
+	end
+	currentPage = tabData.page
+end
+
+----------------------------------------------------------------
+-- ELEMENT BUILDERS (each takes an explicit target page/parent)
+----------------------------------------------------------------
+
+-- a changeable text feature, styled brighter/bigger than the sidebar tab text
+-- Returns an object with :SetText(text) / :Get() so the label can be updated live.
+local function createLabel(page, text)
+	local holder = Instance.new("Frame")
+	holder.BackgroundTransparency = 1
+	holder.Size = UDim2.new(1, 0, 0, 26)
+	holder.LayoutOrder = nextOrder()
+	holder.Parent = page
+
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.Font = Theme.Font
+	label.Text = text or ""
+	label.TextColor3 = Theme.Text
+	label.TextSize = 16
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextWrapped = true
+	label.Parent = holder
+
+	local api = {}
+
+	function api:SetText(newText)
+		label.Text = newText
+	end
+
+	function api:Get()
+		return label.Text
+	end
+
+	return api
+end
+
+local function createButton(page, text, callback)
+	local btn = Instance.new("TextButton")
+	btn.AutoButtonColor = false
+	btn.BackgroundColor3 = Theme.Panel
+	btn.Size = UDim2.new(1, 0, 0, 38)
+	btn.Font = Theme.Font
+	btn.Text = text
+	btn.TextColor3 = Theme.Text
+	btn.TextSize = 14
+	btn.LayoutOrder = nextOrder()
+	btn.Parent = page
+	corner(btn, 8)
+	local btnStroke = stroke(btn, Theme.Stroke, 1)
+
+	btn.MouseEnter:Connect(function()
+		tween(btn, { BackgroundColor3 = Color3.fromRGB(32, 32, 32) }, 0.15)
+		tween(btnStroke, { Color = Theme.AccentDim }, 0.15)
+	end)
+	btn.MouseLeave:Connect(function()
+		tween(btn, { BackgroundColor3 = Theme.Panel }, 0.15)
+		tween(btnStroke, { Color = Theme.Stroke }, 0.15)
+	end)
+	btn.MouseButton1Down:Connect(function()
+		tween(btn, { BackgroundColor3 = Color3.fromRGB(45, 45, 45) }, 0.08)
+	end)
+	btn.MouseButton1Up:Connect(function()
+		tween(btn, { BackgroundColor3 = Color3.fromRGB(32, 32, 32) }, 0.15)
+	end)
+	btn.MouseButton1Click:Connect(function()
+		if callback then
+			task.spawn(callback)
+		end
+	end)
+
+	return btn
+end
+
+local function createToggle(page, text, default, callback)
+	default = default or false
+	local state = default
+
+	local holder = Instance.new("Frame")
+	holder.BackgroundColor3 = Theme.Panel
+	holder.Size = UDim2.new(1, 0, 0, 38)
+	holder.LayoutOrder = nextOrder()
+	holder.Parent = page
+	corner(holder, 8)
+	stroke(holder, Theme.Stroke, 1)
+
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Position = UDim2.new(0, 12, 0, 0)
+	label.Size = UDim2.new(1, -70, 1, 0)
+	label.Font = Theme.Font
+	label.Text = text
+	label.TextColor3 = Theme.Text
+	label.TextSize = 14
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = holder
+
+	local switchBG = Instance.new("Frame")
+	switchBG.AnchorPoint = Vector2.new(1, 0.5)
+	switchBG.Position = UDim2.new(1, -12, 0.5, 0)
+	switchBG.Size = UDim2.new(0, 40, 0, 20)
+	switchBG.BackgroundColor3 = default and Theme.Accent or Color3.fromRGB(45, 45, 45)
+	switchBG.Parent = holder
+	corner(switchBG, 10)
+
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.new(0, 16, 0, 16)
+	knob.Position = default and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+	knob.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+	knob.Parent = switchBG
+	corner(knob, 8)
+
+	local clickArea = Instance.new("TextButton")
+	clickArea.BackgroundTransparency = 1
+	clickArea.Size = UDim2.new(1, 0, 1, 0)
+	clickArea.Text = ""
+	clickArea.Parent = holder
+
+	clickArea.MouseButton1Click:Connect(function()
+		state = not state
+		tween(switchBG, { BackgroundColor3 = state and Theme.Accent or Color3.fromRGB(45, 45, 45) }, 0.2)
+		tween(
+			knob,
+			{ Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8) },
+			0.2,
+			Enum.EasingStyle.Back
+		)
+		if callback then
+			task.spawn(callback, state)
+		end
+	end)
+
+	return holder
+end
+
+local function createTextbox(page, placeholder, callback)
+	local holder = Instance.new("Frame")
+	holder.BackgroundColor3 = Theme.Panel
+	holder.Size = UDim2.new(1, 0, 0, 38)
+	holder.LayoutOrder = nextOrder()
+	holder.Parent = page
+	corner(holder, 8)
+	local boxStroke = stroke(holder, Theme.Stroke, 1)
+
+	local box = Instance.new("TextBox")
+	box.BackgroundTransparency = 1
+	box.Position = UDim2.new(0, 12, 0, 0)
+	box.Size = UDim2.new(1, -24, 1, 0)
+	box.Font = Theme.Font
+	box.PlaceholderText = placeholder or "Enter text..."
+	box.PlaceholderColor3 = Theme.SubText
+	box.Text = ""
+	box.TextColor3 = Theme.Text
+	box.TextSize = 14
+	box.ClearTextOnFocus = false
+	box.TextXAlignment = Enum.TextXAlignment.Left
+	box.Parent = holder
+
+	box.Focused:Connect(function()
+		tween(boxStroke, { Color = Theme.Accent }, 0.15)
+	end)
+	box.FocusLost:Connect(function(enterPressed)
+		tween(boxStroke, { Color = Theme.Stroke }, 0.15)
+		if callback then
+			task.spawn(callback, box.Text, enterPressed)
+		end
+	end)
+
+	return holder
+end
+
+----------------------------------------------------------------
+-- AddTab: adds a tab to the left sidebar and returns a tab object.
+-- Use the returned tab directly to add elements to IT specifically:
+--   local tab = Window:AddTab("Example Tab")
+--   tab:AddButton("Click Me", function() end)
+--   tab:AddToggle("Enable", false, function(state) end)
+--   tab:AddTextbox("Type...", function(text) end)
+--   tab:AddLabel("Some info")
+----------------------------------------------------------------
+function Window:AddTab(text)
+	local btn = Instance.new("TextButton")
+	btn.AutoButtonColor = false
+	btn.BackgroundColor3 = Theme.Panel
+	btn.Size = UDim2.new(1, 0, 0, 32)
+	btn.Text = ""
+	btn.LayoutOrder = nextOrder()
+	btn.Parent = SidebarList
+	corner(btn, 6)
+
+	local indicator = Instance.new("Frame")
+	indicator.AnchorPoint = Vector2.new(0, 0.5)
+	indicator.Position = UDim2.new(0, 0, 0.5, 0)
+	indicator.Size = UDim2.new(0, 3, 0, 14)
+	indicator.BackgroundColor3 = Theme.Accent
+	indicator.BackgroundTransparency = 1
+	indicator.Parent = btn
+	corner(indicator, 2)
+
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Position = UDim2.new(0, 12, 0, 0)
+	label.Size = UDim2.new(1, -16, 1, 0)
+	label.Font = Theme.Font
+	label.Text = text
+	label.TextColor3 = Theme.SubText
+	label.TextSize = 13
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = btn
+
+	local page = newPage()
+	local tabData = { button = btn, indicator = indicator, label = label, page = page }
+	table.insert(tabs, tabData)
+
+	-- element methods scoped to this tab's own page
+	function tabData:AddLabel(labelText)
+		return createLabel(page, labelText)
+	end
+	function tabData:AddButton(btnText, callback)
+		return createButton(page, btnText, callback)
+	end
+	function tabData:AddToggle(toggleText, default, callback)
+		return createToggle(page, toggleText, default, callback)
+	end
+	function tabData:AddTextbox(placeholder, callback)
+		return createTextbox(page, placeholder, callback)
+	end
+
+	btn.MouseEnter:Connect(function()
+		if currentPage ~= page then
+			tween(btn, { BackgroundColor3 = Color3.fromRGB(28, 28, 28) }, 0.15)
+		end
+	end)
+	btn.MouseLeave:Connect(function()
+		if currentPage ~= page then
+			tween(btn, { BackgroundColor3 = Theme.Panel }, 0.15)
+		end
+	end)
+	btn.MouseButton1Click:Connect(function()
+		selectTab(tabData)
+	end)
+
+	if #tabs == 1 then
+		selectTab(tabData)
+	end
+
+	lastTab = tabData
+	return tabData
+end
+
+----------------------------------------------------------------
+-- Window-level convenience methods: add to the most recently created tab.
+-- Auto-creates a "General" tab if none exists yet.
+----------------------------------------------------------------
+local function autoTab()
+	if not lastTab then
+		Window:AddTab("General")
+	end
+	return lastTab
+end
+
+function Window:AddLabel(text)
+	return autoTab():AddLabel(text)
+end
+
+function Window:AddButton(text, callback)
+	return autoTab():AddButton(text, callback)
+end
+
+function Window:AddToggle(text, default, callback)
+	return autoTab():AddToggle(text, default, callback)
+end
+
+function Window:AddTextbox(placeholder, callback)
+	return autoTab():AddTextbox(placeholder, callback)
+end
+
+return Window
